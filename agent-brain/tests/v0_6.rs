@@ -174,3 +174,89 @@ fn git_import_logs_conflicts_with_git_sync_source() {
         "expected git-sourced conflict log entry"
     );
 }
+
+#[test]
+fn sync_restore_repromotes_loser_fact() {
+    use agent_brain::sync::{import_bundle, restore_conflict, MergePolicy, SyncSource};
+
+    let dir = TempDir::new().unwrap();
+    let config = test_config(dir.path());
+    config.ensure_dirs().unwrap();
+    let store = BrainStore::open(&config.db_path).unwrap();
+    let emb = vec![0.02; 384];
+
+    store
+        .store_fact(
+            "lint",
+            "Use ESLint flat config",
+            "global",
+            None,
+            0.9,
+            "agent",
+            &content_hash("Use ESLint flat config"),
+            &emb,
+            "positive",
+        )
+        .unwrap();
+
+    let bundle_dir = dir.path().join("bundle");
+    fs::create_dir_all(&bundle_dir).unwrap();
+    let remote_fact = serde_json::json!({
+        "id": "remote-lint",
+        "topic": "lint",
+        "fact": "Use Oxlint instead",
+        "scope": "global",
+        "scope_key": null,
+        "source": "user",
+        "confidence": 0.95,
+        "polarity": "positive",
+        "content_hash": content_hash("Use Oxlint instead"),
+        "created_at": chrono::Utc::now().timestamp_millis() + 1000,
+        "updated_at": chrono::Utc::now().timestamp_millis() + 1000,
+    });
+    let facts_body = format!("{}\n", remote_fact);
+    let checksum = format!("sha256:{:x}", sha2::Sha256::digest(facts_body.as_bytes()));
+    fs::write(
+        bundle_dir.join("manifest.json"),
+        serde_json::json!({
+            "schema_version": 1,
+            "device_id": "test-device",
+            "exported_at": chrono::Utc::now().timestamp_millis(),
+            "fact_count": 1,
+            "includes_vectors": false,
+            "checksums": { "facts_jsonl": checksum },
+        })
+        .to_string(),
+    )
+    .unwrap();
+    fs::write(bundle_dir.join("facts.jsonl"), facts_body).unwrap();
+
+    let embedder = Embedder::deterministic();
+    import_bundle(
+        &store,
+        &embedder,
+        &bundle_dir,
+        MergePolicy::NewerWins,
+        SyncSource::Git,
+    )
+    .unwrap();
+
+    let conflict_id = store
+        .list_conflicts(1)
+        .unwrap()
+        .into_iter()
+        .find(|c| c["topic"] == "lint")
+        .and_then(|c| c["id"].as_str().map(String::from))
+        .expect("conflict row");
+
+    restore_conflict(&store, &embedder, &conflict_id).unwrap();
+
+    let active = store
+        .get_active_fact_by_topic("lint", "global", None)
+        .unwrap()
+        .expect("active lint fact");
+    assert_eq!(active.fact, "Use ESLint flat config");
+
+    let row = store.get_conflict(&conflict_id).unwrap().expect("conflict row");
+    assert!(row.restored);
+}

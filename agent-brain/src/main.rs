@@ -240,6 +240,40 @@ async fn main() -> Result<()> {
             let brain_settings = settings::AgentBrainSettings::load(&config.home);
             let sub = args.get(2).map(String::as_str).unwrap_or("help");
             match sub {
+                "status" => {
+                    let store = agent_brain::db::store::BrainStore::open(&config.db_path)?;
+                    let status = agent_brain::sync::sync_status(
+                        &config.home,
+                        &brain_settings.sync.git,
+                        &store,
+                    )?;
+                    println!("{}", serde_json::to_string_pretty(&status)?);
+                }
+                "restore" => {
+                    let conflict_id = args
+                        .get(3)
+                        .context("usage: agent-brain sync restore <conflict-id>")?;
+                    let engine = Arc::new(Engine::new(config)?);
+                    let fact_id = agent_brain::sync::restore_conflict(
+                        &engine.store,
+                        &engine.embedder,
+                        conflict_id,
+                    )?;
+                    engine.store.bump_index_version()?;
+                    engine.bootstrap(None)?;
+                    println!("Restored fact {fact_id} from conflict {conflict_id}");
+                }
+                "cloud" => {
+                    let cloud_cmd = args.get(3).map(String::as_str).unwrap_or("help");
+                    match cloud_cmd {
+                        "push" => agent_brain::sync::cloud_push(&brain_settings.sync.cloud)?,
+                        "pull" => agent_brain::sync::cloud_pull(&brain_settings.sync.cloud)?,
+                        _ => {
+                            eprintln!("Usage: agent-brain sync cloud push|pull");
+                            std::process::exit(1);
+                        }
+                    }
+                }
                 "git" => {
                     let git_cmd = args.get(3).map(String::as_str).unwrap_or("help");
                     match git_cmd {
@@ -319,7 +353,10 @@ async fn main() -> Result<()> {
                     }
                 }
                 _ => {
-                    eprintln!("Usage: agent-brain sync git init|clone|push|pull|status");
+                    eprintln!("Usage: agent-brain sync status");
+                    eprintln!("       agent-brain sync restore <conflict-id>");
+                    eprintln!("       agent-brain sync git init|clone|push|pull|status");
+                    eprintln!("       agent-brain sync cloud push|pull");
                     std::process::exit(1);
                 }
             }
@@ -421,11 +458,14 @@ Usage:
   agent-brain briefing                        Print last human-readable route summary
   agent-brain export [dir]                    Export sync bundle (manifest + facts.jsonl)
   agent-brain import <dir> [--policy POLICY]  Import sync bundle (newer_wins default)
+  agent-brain sync status                     Git sync + recent conflicts summary
+  agent-brain sync restore <conflict-id>      Re-promote a fact from conflict_log
   agent-brain sync git init [--remote URL]    Init ~/.agent_brain/sync git repo (S2)
   agent-brain sync git clone [--remote URL]   Clone sync repo on a second machine
   agent-brain sync git push                   Export bundle, commit, push to origin
   agent-brain sync git pull                   Pull from origin and import bundle
   agent-brain sync git status                 Show git sync repo state
+  agent-brain sync cloud push|pull            Encrypted cloud sync (S3 groundwork)
   agent-brain doctor                          Check MCP install, binary, hooks, codesign
   agent-brain doctor --fix                    Re-sign binary (macOS), align mcp.json, refresh hooks
   agent-brain inspect log [--last]            List retrieval logs (what route_task returned)

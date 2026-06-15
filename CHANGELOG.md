@@ -7,10 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-06-15
+
 ### Added
 
-- **Sync S2 groundwork (git):** `sync.git` config section; `agent-brain sync git init|push|pull|status`; bundle stored at `~/.agent_brain/sync/bundle/`.
-- **`sync git clone`** for second-machine setup; git imports tag `conflict_log.sync_source=git`.
+- **Sync S2 (git):** `sync git init|clone|push|pull|status`; bundle at `~/.agent_brain/sync/bundle/`.
+- **`sync status`** — git repo state + unresolved conflicts + recent conflict log entries.
+- **`sync restore <id>`** — re-promote a fact superseded during sync import.
+- **`sync cloud push|pull`** — S3 groundwork (config schema; implementation deferred).
+- **`sync.git.auto_push`** — optional git push after successful `store_memory`.
+- Git imports tag `conflict_log.sync_source=git`; schema v4 adds `conflict_log.restored`.
 
 ## [0.5.0] - 2026-06-15
 

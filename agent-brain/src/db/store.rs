@@ -515,7 +515,7 @@ impl BrainStore {
         let existing: Option<String> = self.with_conn(|conn| {
             Ok(conn
                 .query_row(
-                    "SELECT id FROM facts WHERE content_hash = ?1 AND scope = ?2 AND IFNULL(scope_key,'') = IFNULL(?3,'')",
+                    "SELECT id FROM facts WHERE content_hash = ?1 AND scope = ?2 AND IFNULL(scope_key,'') = IFNULL(?3,'') AND superseded_by IS NULL",
                     params![content_hash, scope, scope_key],
                     |r| r.get(0),
                 )
@@ -927,7 +927,7 @@ impl BrainStore {
     pub fn list_conflicts(&self, limit: usize) -> Result<Vec<serde_json::Value>> {
         self.with_conn(|conn| {
             let mut stmt = conn.prepare(
-                "SELECT id, timestamp, sync_source, topic, scope, scope_key, loser_id, loser_fact, winner_id, winner_fact, resolution FROM conflict_log ORDER BY timestamp DESC LIMIT ?1",
+                "SELECT id, timestamp, sync_source, topic, scope, scope_key, loser_id, loser_fact, winner_id, winner_fact, resolution, restored FROM conflict_log ORDER BY timestamp DESC LIMIT ?1",
             )?;
             let rows = stmt
                 .query_map(params![limit as i64], |row| {
@@ -943,10 +943,65 @@ impl BrainStore {
                         "winner_id": row.get::<_, String>(8)?,
                         "winner_fact": row.get::<_, String>(9)?,
                         "resolution": row.get::<_, String>(10)?,
+                        "restored": row.get::<_, i64>(11)? != 0,
                     }))
                 })?
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(rows)
+        })
+    }
+
+    pub fn get_conflict(&self, id: &str) -> Result<Option<ConflictSnapshot>> {
+        self.with_conn(|conn| {
+            conn.query_row(
+                "SELECT id, topic, scope, scope_key, loser_id, loser_fact, winner_id, restored FROM conflict_log WHERE id = ?1",
+                params![id],
+                |row| {
+                    Ok(ConflictSnapshot {
+                        id: row.get(0)?,
+                        topic: row.get(1)?,
+                        scope: row.get(2)?,
+                        scope_key: row.get(3)?,
+                        loser_id: row.get(4)?,
+                        loser_fact: row.get(5)?,
+                        winner_id: row.get(6)?,
+                        restored: row.get::<_, i64>(7)? != 0,
+                    })
+                },
+            )
+            .optional()
+            .map_err(Into::into)
+        })
+    }
+
+    pub fn delete_fact_by_id(&self, id: &str) -> Result<()> {
+        self.with_conn(|conn| {
+            conn.execute("DELETE FROM facts WHERE id = ?1", rusqlite::params![id])?;
+            Ok(())
+        })
+    }
+
+    pub fn mark_conflict_restored(&self, id: &str) -> Result<()> {
+        self.with_conn(|conn| {
+            let updated = conn.execute(
+                "UPDATE conflict_log SET restored = 1 WHERE id = ?1",
+                params![id],
+            )?;
+            if updated == 0 {
+                anyhow::bail!("conflict not found: {id}");
+            }
+            Ok(())
+        })
+    }
+
+    pub fn count_unresolved_conflicts(&self) -> Result<usize> {
+        self.with_conn(|conn| {
+            let count: i64 = conn.query_row(
+                "SELECT COUNT(*) FROM conflict_log WHERE restored = 0",
+                [],
+                |r| r.get(0),
+            )?;
+            Ok(count as usize)
         })
     }
 
@@ -1320,6 +1375,17 @@ pub struct ActiveFactSnapshot {
     pub id: String,
     pub fact: String,
     pub updated_at: i64,
+}
+
+pub struct ConflictSnapshot {
+    pub id: String,
+    pub topic: String,
+    pub scope: String,
+    pub scope_key: Option<String>,
+    pub loser_id: String,
+    pub loser_fact: String,
+    pub winner_id: String,
+    pub restored: bool,
 }
 
 #[derive(Debug, Clone)]

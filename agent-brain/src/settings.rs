@@ -18,6 +18,39 @@ pub struct AgentBrainSettings {
 pub struct SyncSettings {
     #[serde(default)]
     pub git: GitSyncSettings,
+    #[serde(default)]
+    pub cloud: CloudSyncSettings,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CloudSyncSettings {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub bucket: String,
+    #[serde(default = "default_cloud_key")]
+    pub key: String,
+    #[serde(default = "default_encryption_key_env")]
+    pub encryption_key_env: String,
+}
+
+fn default_cloud_key() -> String {
+    "brain-sync.tar.zst.age".into()
+}
+
+fn default_encryption_key_env() -> String {
+    "AGENT_BRAIN_SYNC_KEY".into()
+}
+
+impl Default for CloudSyncSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            bucket: String::new(),
+            key: default_cloud_key(),
+            encryption_key_env: default_encryption_key_env(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -41,6 +74,7 @@ impl Default for SyncSettings {
     fn default() -> Self {
         Self {
             git: GitSyncSettings::default(),
+            cloud: CloudSyncSettings::default(),
         }
     }
 }

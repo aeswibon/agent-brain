@@ -28,6 +28,7 @@ impl BrainMcp {
         let embedder = engine.embedder.clone();
         let cache = engine.cache.clone();
         let auto = engine.auto_capture_enabled;
+        let home = engine.config.home.clone();
 
         let write_queue = WriteQueue::spawn(move |op| match op {
             WriteOp::StoreMemory { resp_tx, payload } => {
@@ -63,6 +64,18 @@ impl BrainMcp {
                     )?;
                     cache.clear();
                     store.bump_index_version().ok();
+
+                    if res.stored {
+                        let settings = crate::settings::AgentBrainSettings::load(&home);
+                        if settings.sync.git.auto_push {
+                            if let Err(err) =
+                                crate::sync::git_push(&store, &home, &settings.sync.git)
+                            {
+                                tracing::warn!(target: "agent_brain::sync", "auto_push failed: {err}");
+                            }
+                        }
+                    }
+
                     Ok(serde_json::json!({
                         "id": res.id,
                         "stored": res.stored,
