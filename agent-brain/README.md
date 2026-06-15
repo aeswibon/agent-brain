@@ -67,13 +67,17 @@ auto_update:
     repo: aeswibon/agent-brain
     bin_path: ~/.local/bin/agent-brain
     refresh_cursor: true
+    restart_after_update: true
+    restart_idle_secs: 10
+    restart_max_wait_secs: 300
+    restart_min_delay_secs: 2
 ```
 
-When enabled, MCP `serve` checks for updates in the background (packages via `git fetch`, MCP via GitHub releases). After an MCP binary update during `serve`, the process **restarts itself** (Unix: `exec serve`) so Cursor reconnects without a full IDE restart. Disable with `mcp.restart_after_update: false`.
+When enabled, MCP `serve` checks for updates in the background (packages via `git fetch`, MCP via GitHub releases). After an MCP binary update during `serve`, the process **restarts itself** when idle (Unix: `exec serve`) so Cursor reconnects without a full IDE restart. Tune with `restart_idle_secs`, `restart_max_wait_secs`, and `restart_min_delay_secs`. Disable with `mcp.restart_after_update: false`.
 
 Run manually with `agent-brain update --force` (CLI updates disk only; toggle MCP in Settings if `serve` is already running).
 
-Environment overrides: `AGENT_BRAIN_AUTO_UPDATE`, `AGENT_BRAIN_AUTO_UPDATE_PACKAGES`, `AGENT_BRAIN_AUTO_UPDATE_MCP`, `AGENT_BRAIN_AUTO_UPDATE_INTERVAL_HOURS`, `AGENT_BRAIN_MCP_RESTART_DELAY_SEC` (default `2`).
+Environment overrides: `AGENT_BRAIN_AUTO_UPDATE`, `AGENT_BRAIN_AUTO_UPDATE_PACKAGES`, `AGENT_BRAIN_AUTO_UPDATE_MCP`, `AGENT_BRAIN_AUTO_UPDATE_INTERVAL_HOURS`, `AGENT_BRAIN_AUTO_UPDATE_DELAY_SEC`.
 
 ## Install MCP server
 
@@ -100,7 +104,14 @@ Run `agent-brain install --global` after building, or add to `~/.cursor/mcp.json
     "agent-brain": {
       "command": "/absolute/path/to/agent-brain",
       "args": ["serve"],
-      "env": { "RUST_LOG": "agent_brain=info" }
+      "env": {
+        "RUST_LOG": "agent_brain=warn",
+        "AGENT_BRAIN_BOOTSTRAP_BG": "1",
+        "AGENT_BRAIN_BOOTSTRAP_DELAY_SEC": "2",
+        "AGENT_BRAIN_BOOTSTRAP_INTERVAL_SEC": "3600",
+        "AGENT_BRAIN_AUTO_UPDATE_DELAY_SEC": "300",
+        "AGENT_BRAIN_SESSION_INGEST_DELAY_SEC": "180"
+      }
     }
   }
 }

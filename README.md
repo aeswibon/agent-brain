@@ -60,8 +60,14 @@ user message → turn cache? → BM25 prefilter → (optional) embed → dot-sco
 | `AGENT_BRAIN_TURN_CACHE_OPEN_FILES` | off | `1` — include open files in cache key (fewer hits) |
 | `AGENT_BRAIN_SESSION_INGEST_BG` | on | `0` — block `serve` until session import finishes |
 | `AGENT_BRAIN_BOOTSTRAP_BG` | on | `0` — block `serve` until index sync finishes (slower MCP enable) |
+| `AGENT_BRAIN_BOOTSTRAP_DELAY_SEC` | `2` | Seconds before background bootstrap starts |
+| `AGENT_BRAIN_BOOTSTRAP_INTERVAL_SEC` | `3600` | Skip bootstrap if indexed within this window |
+| `AGENT_BRAIN_AUTO_UPDATE_DELAY_SEC` | `300` | Seconds after `serve` before auto-update runs |
+| `AGENT_BRAIN_SESSION_INGEST_DELAY_SEC` | `180` | Extra delay before background session ingest |
 
-**Operational tips:** keep installed packages lean (`agent-brain package list`); use `RUST_LOG=agent_brain=info` and watch `latency_ms`, `cache_hit`, `bm25_fast_path`, `p95_ms` in stderr; pass explicit `limits` to `route_task` if your MCP client sends zeros.
+**MCP restart after auto-update** is configured in `~/.agent_brain/config.yaml` (`mcp.restart_idle_secs`, `restart_max_wait_secs`, `restart_min_delay_secs`) — not env vars.
+
+**Operational tips:** keep installed packages lean (`agent-brain package list`); use `RUST_LOG=agent_brain=info` and watch `latency_ms`, `cache_hit`, `bm25_fast_path`, `p95_ms` in stderr; pass explicit `limits` to `route_task` if your MCP client sends zeros; run `agent-brain version` to confirm the binary on disk.
 
 ## Storage direction (now vs next)
 
@@ -149,6 +155,7 @@ agent-brain add affaan-m/ecc   # optional packages
 | `agent-brain add <owner/repo>` | Install a GitHub skills/agents package |
 | `agent-brain package list\|update\|remove` | Manage installed packages |
 | `agent-brain index` | Force reindex (optional — also runs on MCP start) |
+| `agent-brain version` | Print installed version |
 | `agent-brain serve` | Manual MCP server (debug only) |
 
 ## MCP config
@@ -161,7 +168,14 @@ agent-brain add affaan-m/ecc   # optional packages
     "agent-brain": {
       "command": "/Users/you/.local/bin/agent-brain",
       "args": ["serve"],
-      "env": { "RUST_LOG": "agent_brain=info" }
+      "env": {
+        "RUST_LOG": "agent_brain=warn",
+        "AGENT_BRAIN_BOOTSTRAP_BG": "1",
+        "AGENT_BRAIN_BOOTSTRAP_DELAY_SEC": "2",
+        "AGENT_BRAIN_BOOTSTRAP_INTERVAL_SEC": "3600",
+        "AGENT_BRAIN_AUTO_UPDATE_DELAY_SEC": "300",
+        "AGENT_BRAIN_SESSION_INGEST_DELAY_SEC": "180"
+      }
     }
   }
 }

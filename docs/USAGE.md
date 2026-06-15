@@ -70,11 +70,20 @@ agent-brain install --global
     "agent-brain": {
       "command": "/Users/you/.local/bin/agent-brain",
       "args": ["serve"],
-      "env": { "RUST_LOG": "agent_brain=info" }
+      "env": {
+        "RUST_LOG": "agent_brain=warn",
+        "AGENT_BRAIN_BOOTSTRAP_BG": "1",
+        "AGENT_BRAIN_BOOTSTRAP_DELAY_SEC": "2",
+        "AGENT_BRAIN_BOOTSTRAP_INTERVAL_SEC": "3600",
+        "AGENT_BRAIN_AUTO_UPDATE_DELAY_SEC": "300",
+        "AGENT_BRAIN_SESSION_INGEST_DELAY_SEC": "180"
+      }
     }
   }
 }
 ```
+
+Confirm version after install: `agent-brain version`
 
 Restart Cursor.
 
@@ -103,7 +112,7 @@ Check **Settings → MCP** — the server status should be green after the first
 ## Daily workflow
 
 1. Open Cursor — MCP starts in the background automatically
-2. **Agent mode** — the model must call **`route_task`** at the start of every turn (enforced by `~/.cursor/rules/agent-brain.mdc`)
+2. **Agent mode** — the model must call **`route_task`** at the start of every turn (enforced by project rule `.cursor/rules/agent-brain.mdc` and hooks)
 3. agent-brain returns recommended agents, skills, rules, and memory under a token budget
 4. The agent loads skills from returned `path` values and applies rules/memory
 5. At task end, the agent calls **`store_memory`** for durable decisions
@@ -148,7 +157,7 @@ Packages live at `~/.agent_brain/packages/<name>/`.
 
 ### MCP server shows red / failed to start
 
-1. Confirm binary exists: `which agent-brain`
+1. Confirm binary exists: `which agent-brain` and `agent-brain version`
 2. Use an **absolute path** in `mcp.json` (run `agent-brain install --global` again)
 3. Check logs: **View → Output → MCP** (select `agent-brain`)
 4. First start downloads the embedding model (~90MB) — can take 1–2 minutes

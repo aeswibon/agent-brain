@@ -12,6 +12,11 @@ async fn main() -> Result<()> {
         .init();
 
     let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|a| a == "--version" || a == "-V") {
+        println!("{}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
+
     let cmd = args.get(1).map(String::as_str).unwrap_or("serve");
 
     match cmd {
@@ -181,6 +186,9 @@ async fn main() -> Result<()> {
                 }
             }
         }
+        "version" => {
+            println!("agent-brain {}", env!("CARGO_PKG_VERSION"));
+        }
         "help" | "--help" | "-h" => {
             print_usage();
         }
@@ -217,6 +225,8 @@ Usage:
   agent-brain update [--force]                Run configured package/MCP auto-update now
   agent-brain config init                     Write ~/.agent_brain/config.yaml defaults
   agent-brain config show                     Print active config file
+  agent-brain version                         Print installed version
+  agent-brain --version                       Same as version (prints version only)
 
 Examples:
   agent-brain add https://github.com/affaan-m/ecc

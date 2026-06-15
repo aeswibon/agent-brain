@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.13] - 2026-06-15
+
+### Added
+
+- `agent-brain version` and `agent-brain --version` print the installed crate version.
+
+### Changed
+
+- Documentation for startup tuning env vars, idle-gated MCP restart settings in `config.yaml`, and `install --global` MCP defaults.
+- `config.example.yaml` enables MCP auto-update by default (safe now that `v0.3.12+` is on GitHub).
+
 ## [0.3.12] - 2026-06-15
 
 ### Added
@@ -15,16 +26,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `agent-brain update [--force]` and `agent-brain config init|show` CLI commands.
 - Background auto-update on MCP `serve` when `auto_update.enabled` is true.
 - MCP self-update can auto-restart the `serve` process (`mcp.restart_after_update`, Unix `exec` + Cursor reconnect).
+- Idle-gated MCP restart: waits until no in-flight tool calls plus `restart_idle_secs` quiet window (`mcp_activity`).
+- Startup stagger env vars: `AGENT_BRAIN_BOOTSTRAP_DELAY_SEC`, `BOOTSTRAP_INTERVAL_SEC`, `AUTO_UPDATE_DELAY_SEC`, `SESSION_INGEST_DELAY_SEC`.
+- Cursor project rule at `.cursor/rules/agent-brain.mdc` (replaces non-loading `~/.cursor/rules/` path).
 
 ### Fixed
 
 - MCP `serve` no longer blocks on full index sync before stdio is live — Cursor enablement is much faster (`AGENT_BRAIN_BOOTSTRAP_BG=0` restores blocking bootstrap).
 - Index sync skips re-embedding unchanged files (content-hash match) and only bumps `index_version` when items actually change.
+- `postToolUse` hook clears route gate for Agent MCP tools (`mcp_agent-brain_route_task`).
+- MCP auto-update skips download when local binary is ahead of GitHub latest (dev builds).
+- In-place MCP restart only when `current_exe` matches `mcp.bin_path`.
 
 ### Changed
 
 - Embedding model loads lazily on first embed (not at process start).
 - Default branch renamed to `master`.
+- `install --global` writes startup-tuned MCP env defaults and `RUST_LOG=agent_brain=warn`.
 
 ## [0.3.10] - 2026-06-15
 

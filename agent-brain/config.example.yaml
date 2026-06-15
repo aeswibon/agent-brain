@@ -14,4 +14,3 @@ auto_update:
     restart_idle_secs: 10
     restart_max_wait_secs: 300
     restart_min_delay_secs: 2
-    # Set enabled: false while running a local dev build ahead of GitHub releases.
