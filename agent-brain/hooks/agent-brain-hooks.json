@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeSubmitPrompt": [
+      {
+        "command": "./hooks/agent-brain/route_gate.py",
+        "matcher": "UserPromptSubmit"
+      }
+    ],
+    "preToolUse": [
+      {
+        "command": "./hooks/agent-brain/route_gate.py"
+      }
+    ],
+    "beforeMCPExecution": [
+      {
+        "command": "./hooks/agent-brain/route_gate.py",
+        "failClosed": true
+      }
+    ],
+    "afterMCPExecution": [
+      {
+        "command": "./hooks/agent-brain/route_gate.py"
+      }
+    ]
+  }
+}

@@ -176,7 +176,7 @@ struct ExportMemoryParams {
 
 #[tool_router]
 impl BrainMcp {
-    #[tool(description = "Primary routing tool. Returns recommended agents, skills, rules, and memory for the current user message.")]
+    #[tool(description = "REQUIRED every turn before planning or edits. Returns ranked agents, skills, rules, and memory under a token budget. Pass user_message, current_working_directory, and open_files.")]
     async fn route_task(
         &self,
         params: Parameters<RouteTaskParams>,
@@ -226,7 +226,7 @@ impl BrainMcp {
         json_result(resp)
     }
 
-    #[tool(description = "Persist a durable fact at task completion. Max 50 words. No secrets.")]
+    #[tool(description = "REQUIRED at task end for durable decisions. Max 50 words. No secrets.")]
     async fn store_memory(
         &self,
         params: Parameters<StoreMemoryParams>,
@@ -327,7 +327,12 @@ impl ServerHandler for BrainMcp {
     fn get_info(&self) -> ServerInfo {
         ServerInfo {
             instructions: Some(
-                "Call route_task every turn to get recommended agents, skills, rules, and memory under a token budget.".into(),
+                "agent-brain is the routing layer for this session. \
+                 REQUIRED: call route_task at the start of every user turn before choosing skills, rules, or agents. \
+                 Use returned paths to load skills; apply applicable_rules and must_apply. \
+                 At task end, call store_memory for durable outcomes (max 50 words). \
+                 Do not bypass this server when its tools are available."
+                    .into(),
             ),
             capabilities: ServerCapabilities::builder().enable_tools().build(),
             server_info: Implementation {

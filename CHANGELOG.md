@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-06-15
+
+### Added
+
+- **Cursor hooks enforcement** — `install --global` installs `route_gate.py` hooks that block tools until `route_task` succeeds each user turn
+- Stronger MCP server instructions and Cursor rule for required `route_task` usage
+
 ## [0.3.3] - 2026-06-15
 
 ### Added

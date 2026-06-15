@@ -1,5 +1,34 @@
 # agent-brain usage guide
 
+## Do I need to do anything after install?
+
+**Almost nothing.** One-time:
+
+1. `agent-brain install --global` (binary + Cursor MCP config + enforcement rule)
+2. Restart Cursor and enable **agent-brain** under Settings → MCP
+3. Optional: `agent-brain add affaan-m/ecc`
+
+After that, **you do not run `serve` or `index` daily.** Cursor starts the MCP server; agent-brain indexes on startup.
+
+The **agent** (not you) calls `route_task` every turn and `store_memory` at task end.
+
+**Enforcement (Cursor):** `install --global` installs hooks that **block** Shell/Read/Write/MCP tools until `route_task` succeeds each user message. Rules + MCP instructions are backup; hooks are the hard gate.
+
+> Disable hooks only for debugging: `AGENT_BRAIN_ROUTE_HOOKS=0` in MCP env or shell.
+
+## Other MCP hosts
+
+Same binary works with Claude Desktop, Claude Code, Codex, or any MCP client. Point their MCP config at:
+
+```json
+{
+  "command": "/absolute/path/to/agent-brain",
+  "args": ["serve"]
+}
+```
+
+agent-brain already **indexes** skills/agents from `~/.claude/` and `~/.codex/` paths. Only the **installer** is Cursor-specific today; add a host rule in that product telling the agent to call `route_task` every turn.
+
 ## Do I need to start the MCP manually?
 
 **No — not for normal Cursor use.**
@@ -74,9 +103,10 @@ Check **Settings → MCP** — the server status should be green after the first
 ## Daily workflow
 
 1. Open Cursor — MCP starts in the background automatically
-2. Each agent turn can call **`route_task`** with the user message
+2. **Agent mode** — the model must call **`route_task`** at the start of every turn (enforced by `~/.cursor/rules/agent-brain.mdc`)
 3. agent-brain returns recommended agents, skills, rules, and memory under a token budget
-4. The agent uses those recommendations to pick tools/skills
+4. The agent loads skills from returned `path` values and applies rules/memory
+5. At task end, the agent calls **`store_memory`** for durable decisions
 
 You only need `agent-brain index` if you:
 
@@ -146,7 +176,25 @@ Packages live at `~/.agent_brain/packages/<name>/`.
 |----------|---------|---------|
 | `AGENT_BRAIN_HOME` | `~/.agent_brain` | Data, packages, database |
 | `AGENT_BRAIN_SESSION_INGEST` | `1` (on) | Set `0` or `false` to disable legacy session import |
+| `AGENT_BRAIN_ROUTE_HOOKS` | `1` (on) | Set `0` to disable Cursor route_task gate hooks |
 | `RUST_LOG` | `agent_brain=info` | Log level (stderr only) |
+
+## Cursor hooks (enforcement)
+
+`agent-brain install --global` installs:
+
+- `~/.cursor/hooks/agent-brain/route_gate.py`
+- Entries in `~/.cursor/hooks.json` for `beforeSubmitPrompt`, `preToolUse`, `beforeMCPExecution`, `afterMCPExecution`
+
+**Behavior each user message:**
+
+1. `beforeSubmitPrompt` marks the turn as needing `route_task`
+2. `preToolUse` / `beforeMCPExecution` **deny** Shell, Read, Write, and other MCP tools until `route_task` runs
+3. `afterMCPExecution` clears the gate when agent-brain `route_task` succeeds
+
+Verify under **Settings → Hooks** and the **Hooks** output channel. Requires `python3` on PATH.
+
+Other hosts (Claude, Codex): hooks not installed yet — use MCP config + host rules for now.
 
 ## Legacy session import (0.3.2 hack)
 

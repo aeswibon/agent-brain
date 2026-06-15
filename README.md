@@ -22,7 +22,24 @@ curl -fsSL https://raw.githubusercontent.com/aeswibon/agent-brain/main/scripts/i
 agent-brain add affaan-m/ecc
 ```
 
-That's it. Use Agent mode in chat — the model can call `route_task` each turn.
+That's it. Open Cursor in **Agent mode** — the editor starts agent-brain, indexes on boot, and the installed rule requires `route_task` each turn.
+
+## What runs automatically
+
+| Action | Who does it |
+|--------|-------------|
+| Start MCP server | Cursor spawns `agent-brain serve` |
+| Index skills/rules/memory | agent-brain on MCP startup |
+| Route each turn | Agent calls `route_task` — **blocked by Cursor hooks** until called |
+| Persist decisions | Agent calls `store_memory` at task end |
+
+`install --global` writes MCP config, a Cursor rule, and **hooks** (`~/.cursor/hooks.json`) that deny other tools until `route_task` runs each turn.
+
+CLI is only for one-time setup (`install`, optional `add`) or maintenance (`package update`).
+
+## Other agents
+
+The MCP server is host-agnostic. **Cursor** has a one-command installer. **Claude Code / Codex / Claude Desktop** work with the same binary — add it to their MCP config manually; skills under `~/.claude/` and `~/.codex/` are already indexed. Host-specific installers come later.
 
 ## Install options
 
