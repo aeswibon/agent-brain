@@ -23,7 +23,7 @@ Use `agent-brain serve` only for debugging MCP outside Cursor.
 ## Quick setup
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/aeswibon/agent-brain/main/scripts/install.sh | bash -s -- --global
+curl -fsSL https://raw.githubusercontent.com/aeswibon/agent-brain/master/scripts/install.sh | bash -s -- --global
 # restart Cursor → Settings → MCP → enable agent-brain
 agent-brain add affaan-m/ecc   # optional
 ```
@@ -57,7 +57,7 @@ agent-brain package remove ecc
 ### One-liner (recommended)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/aeswibon/agent-brain/main/scripts/install.sh | bash -s -- --global
+curl -fsSL https://raw.githubusercontent.com/aeswibon/agent-brain/master/scripts/install.sh | bash -s -- --global
 ```
 
 ### From source

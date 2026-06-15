@@ -2,7 +2,7 @@
 # Install agent-brain MCP server and register it with Cursor.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/aeswibon/agent-brain/main/scripts/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/aeswibon/agent-brain/master/scripts/install.sh | bash
 #   curl -fsSL ... | bash -s -- --from-source
 #   curl -fsSL ... | bash -s -- --global
 #

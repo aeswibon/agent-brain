@@ -21,8 +21,9 @@ pub fn sync_index(
     for root in roots {
         if root.is_file() {
             if let Some(item) = parse_file(&root, None, package_context(&root, &config.home)) {
-                index_item(store, embedder, &item)?;
-                count += 1;
+                if index_item(store, embedder, &item)? {
+                    count += 1;
+                }
             }
             continue;
         }
@@ -41,13 +42,16 @@ pub fn sync_index(
             }
             let repo = cwd.and_then(|c| crate::config::find_repo_root(c));
             if let Some(item) = parse_file(path, repo.as_deref(), pkg_ctx.clone()) {
-                index_item(store, embedder, &item)?;
-                count += 1;
+                if index_item(store, embedder, &item)? {
+                    count += 1;
+                }
             }
         }
     }
 
-    store.bump_index_version()?;
+    if count > 0 {
+        store.bump_index_version()?;
+    }
     Ok(count)
 }
 
@@ -169,8 +173,11 @@ fn extract_agent_text(content: &str, name: &str) -> String {
     format!("{name} {summary}").chars().take(800).collect()
 }
 
-fn index_item(store: &BrainStore, embedder: &Embedder, item: &ParsedItem) -> Result<()> {
+fn index_item(store: &BrainStore, embedder: &Embedder, item: &ParsedItem) -> Result<bool> {
     let hash = content_hash(&item.text);
+    if store.indexed_item_current_hash(&item.source_path)? .as_deref() == Some(hash.as_str()) {
+        return Ok(false);
+    }
     let embedding = embedder.embed_one(&format!("{} {}", item.topic, item.text))?;
     store.upsert_indexed_item(
         item.item_type,
@@ -181,5 +188,6 @@ fn index_item(store: &BrainStore, embedder: &Embedder, item: &ParsedItem) -> Res
         item.scope_key.as_deref(),
         &hash,
         Some(&embedding),
-    )
+    )?;
+    Ok(true)
 }

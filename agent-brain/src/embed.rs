@@ -1,8 +1,12 @@
+use std::sync::Mutex;
+
 use anyhow::{Context, Result};
 use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
 
 pub struct Embedder {
-    model: Option<TextEmbedding>,
+    model: Mutex<Option<TextEmbedding>>,
+    model_kind: EmbeddingModel,
+    deterministic: bool,
     pub model_id: &'static str,
 }
 
@@ -14,49 +18,83 @@ impl Embedder {
     /// Offline embedder for tests and CI — no ONNX model download.
     pub fn deterministic() -> Self {
         Self {
-            model: None,
+            model: Mutex::new(None),
+            model_kind: EmbeddingModel::AllMiniLML6V2,
+            deterministic: true,
             model_id: "deterministic",
         }
     }
 
     pub fn with_model(model: EmbeddingModel) -> Result<Self> {
         let model_id = embedding_model_name(&model);
-        let inner = TextEmbedding::try_new(
-            InitOptions::new(model).with_show_download_progress(false),
-        )
-        .context("init fastembed")?;
         Ok(Self {
-            model: Some(inner),
+            model: Mutex::new(None),
+            model_kind: model,
+            deterministic: false,
             model_id,
         })
     }
 
-    pub fn dim(&self) -> usize {
-        match &self.model {
-            Some(model) => model
-                .embed(vec!["probe".to_string()], None)
-                .map(|v| v.first().map(|e| e.len()).unwrap_or(384))
-                .unwrap_or(384),
-            None => 384,
+    fn ensure_model(&self) -> Result<()> {
+        if self.deterministic {
+            anyhow::bail!("deterministic embedder has no ONNX model");
         }
+        let mut guard = self
+            .model
+            .lock()
+            .map_err(|_| anyhow::anyhow!("embedder lock poisoned"))?;
+        if guard.is_none() {
+            *guard = Some(
+                TextEmbedding::try_new(
+                    InitOptions::new(self.model_kind.clone()).with_show_download_progress(false),
+                )
+                .context("init fastembed")?,
+            );
+        }
+        Ok(())
+    }
+
+    fn model(&self) -> Result<std::sync::MutexGuard<'_, Option<TextEmbedding>>> {
+        self.ensure_model()?;
+        self.model
+            .lock()
+            .map_err(|_| anyhow::anyhow!("embedder lock poisoned"))
+    }
+
+    pub fn dim(&self) -> usize {
+        if self.deterministic {
+            return 384;
+        }
+        self.model()
+            .ok()
+            .and_then(|guard| {
+                guard.as_ref().and_then(|model| {
+                    model
+                        .embed(vec!["probe".to_string()], None)
+                        .ok()
+                        .and_then(|v| v.first().map(|e| e.len()))
+                })
+            })
+            .unwrap_or(384)
     }
 
     pub fn embed(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
         if texts.is_empty() {
             return Ok(vec![]);
         }
-        if self.model.is_none() {
+        if self.deterministic {
             return Ok(texts.iter().map(|t| deterministic_embedding(t)).collect());
         }
-        self.model
+        let guard = self.model()?;
+        guard
             .as_ref()
-            .unwrap()
+            .context("embedder not initialized")?
             .embed(texts.to_vec(), None)
             .context("embed texts")
     }
 
     pub fn embed_one(&self, text: &str) -> Result<Vec<f32>> {
-        if self.model.is_none() {
+        if self.deterministic {
             return Ok(deterministic_embedding(text));
         }
         let mut emb = self.embed(&[text.to_string()])?.remove(0);

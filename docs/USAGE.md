@@ -50,7 +50,7 @@ After editing `mcp.json`, **restart Cursor** (or reload MCP in **Settings → MC
 ### 1. Install the binary
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/aeswibon/agent-brain/main/scripts/install.sh | bash -s -- --global
+curl -fsSL https://raw.githubusercontent.com/aeswibon/agent-brain/master/scripts/install.sh | bash -s -- --global
 ```
 
 Or from source:

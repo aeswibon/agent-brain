@@ -18,15 +18,20 @@ async fn main() -> Result<()> {
         "serve" => {
             let config = Config::load()?;
             let engine = Arc::new(Engine::new(config)?);
-            let n = engine.bootstrap(None)?;
-            engine.ingest_sessions_background();
-            tracing::info!("indexed {n} items");
+            if engine.config.bootstrap_background {
+                tracing::info!(target: "agent_brain::bootstrap", "starting MCP; bootstrap runs in background");
+                engine.spawn_bootstrap(None);
+            } else {
+                let n = engine.bootstrap(None)?;
+                tracing::info!("indexed {n} items");
+            }
             mcp::run_stdio(engine).await?;
         }
         "index" => {
             let mut config = Config::load()?;
+            config.bootstrap_background = false;
             config.session_ingest_background = false;
-            let engine = Engine::new(config)?;
+            let engine = Arc::new(Engine::new(config)?);
             let n = engine.bootstrap(None)?;
             println!("Indexed {n} items");
         }
@@ -44,8 +49,9 @@ async fn main() -> Result<()> {
             );
             if !skip_index {
                 let mut config = config;
+                config.bootstrap_background = false;
                 config.session_ingest_background = false;
-                let engine = Engine::new(config)?;
+                let engine = Arc::new(Engine::new(config)?);
                 let n = engine.bootstrap(None)?;
                 println!("Indexed {n} items");
             }
@@ -80,8 +86,9 @@ async fn main() -> Result<()> {
                         println!("Updated {} ({})", pkg.name, pkg.commit.unwrap_or_default());
                     }
                     let mut config = config;
+                    config.bootstrap_background = false;
                     config.session_ingest_background = false;
-                    let engine = Engine::new(config)?;
+                    let engine = Arc::new(Engine::new(config)?);
                     let n = engine.bootstrap(None)?;
                     println!("Indexed {n} items");
                 }
@@ -137,7 +144,7 @@ Examples:
   agent-brain package update ecc
 
 Install on another machine:
-  curl -fsSL https://raw.githubusercontent.com/aeswibon/agent-brain/main/scripts/install.sh | bash -s -- --global
+  curl -fsSL https://raw.githubusercontent.com/aeswibon/agent-brain/master/scripts/install.sh | bash -s -- --global
   agent-brain add affaan-m/ecc
 
 Cursor starts MCP automatically — you do not run 'serve' manually.

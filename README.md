@@ -4,6 +4,8 @@ Fast, local MCP server that routes each turn to the right **agents, skills, rule
 
 Rust is the brain; Cursor/Claude are the hands.
 
+**MCP is live immediately** — `serve` starts stdio first; index sync, session ingest, and prewarm run in a background thread by default (`AGENT_BRAIN_BOOTSTRAP_BG=0` for the old blocking behavior).
+
 ## Why agent-brain?
 
 Three problems every power-user hits with Cursor skills and rules:
@@ -57,6 +59,7 @@ user message → turn cache? → BM25 prefilter → (optional) embed → dot-sco
 | `AGENT_BRAIN_EMBED_MODEL` | `mini` | `fast`, `bge-small`, `bge-small-q` (trade quality vs speed) |
 | `AGENT_BRAIN_TURN_CACHE_OPEN_FILES` | off | `1` — include open files in cache key (fewer hits) |
 | `AGENT_BRAIN_SESSION_INGEST_BG` | on | `0` — block `serve` until session import finishes |
+| `AGENT_BRAIN_BOOTSTRAP_BG` | on | `0` — block `serve` until index sync finishes (slower MCP enable) |
 
 **Operational tips:** keep installed packages lean (`agent-brain package list`); use `RUST_LOG=agent_brain=info` and watch `latency_ms`, `cache_hit`, `bm25_fast_path`, `p95_ms` in stderr; pass explicit `limits` to `route_task` if your MCP client sends zeros.
 
@@ -92,7 +95,7 @@ user message → turn cache? → BM25 prefilter → (optional) embed → dot-sco
 
 ```bash
 # 1. Install binary + write ~/.cursor/mcp.json
-curl -fsSL https://raw.githubusercontent.com/aeswibon/agent-brain/main/scripts/install.sh | bash -s -- --global
+curl -fsSL https://raw.githubusercontent.com/aeswibon/agent-brain/master/scripts/install.sh | bash -s -- --global
 
 # 2. Restart Cursor, enable agent-brain under Settings → MCP
 

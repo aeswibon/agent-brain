@@ -24,6 +24,7 @@ fn test_config(dir: &TempDir) -> Config {
         session_ingest_enabled: false,
         session_max_age_days: 90,
         prewarm_on_bootstrap: false,
+        bootstrap_background: false,
         embedding_cache_enabled: true,
         bm25_fast_path_enabled: true,
         session_ingest_background: false,

@@ -57,7 +57,7 @@ impl Engine {
         })
     }
 
-    pub fn bootstrap(&self, cwd: Option<&Path>) -> Result<usize> {
+    pub fn bootstrap(self: &Arc<Self>, cwd: Option<&Path>) -> Result<usize> {
         let mut n = index::sync_index(&self.store, &self.config, &self.embedder, cwd)?;
         if self.config.session_ingest_enabled && !self.config.session_ingest_background {
             let sessions = crate::sessions::ingest_legacy_sessions(
@@ -67,8 +67,23 @@ impl Engine {
             )?;
             if sessions > 0 {
                 tracing::info!("session ingest: imported {sessions} legacy snippets");
+                self.store.bump_index_version()?;
             }
             n += sessions;
+        }
+        if self.config.session_ingest_enabled && self.config.session_ingest_background {
+            match crate::sessions::ingest_legacy_sessions(&self.store, &self.embedder, &self.config)
+            {
+                Ok(sessions) if sessions > 0 => {
+                    tracing::info!(
+                        "session ingest (background): imported {sessions} legacy snippets"
+                    );
+                    self.store.bump_index_version()?;
+                    n += sessions;
+                }
+                Ok(_) => {}
+                Err(err) => tracing::warn!(error = %err, "background session ingest failed"),
+            }
         }
         if self.config.prewarm_on_bootstrap {
             if let Err(err) = self.prewarm() {
@@ -78,23 +93,14 @@ impl Engine {
         Ok(n)
     }
 
-    pub fn ingest_sessions_background(self: &Arc<Self>) {
-        if !self.config.session_ingest_enabled || !self.config.session_ingest_background {
-            return;
-        }
-        let store = Arc::clone(&self.store);
-        let embedder = Arc::clone(&self.embedder);
-        let config = self.config.clone();
+    pub fn spawn_bootstrap(self: &Arc<Self>, cwd: Option<&Path>) {
+        let engine = Arc::clone(self);
+        let cwd = cwd.map(|p| p.to_path_buf());
         std::thread::spawn(move || {
-            match crate::sessions::ingest_legacy_sessions(&store, &embedder, &config) {
-                Ok(sessions) if sessions > 0 => {
-                    tracing::info!("session ingest (background): imported {sessions} legacy snippets");
-                    if let Err(err) = store.bump_index_version() {
-                        tracing::warn!(error = %err, "failed to bump index after session ingest");
-                    }
-                }
-                Ok(_) => {}
-                Err(err) => tracing::warn!(error = %err, "background session ingest failed"),
+            let cwd_ref = cwd.as_deref();
+            match engine.bootstrap(cwd_ref) {
+                Ok(n) => tracing::info!(target: "agent_brain::bootstrap", items = n, "bootstrap complete"),
+                Err(err) => tracing::warn!(error = %err, "background bootstrap failed"),
             }
         });
     }

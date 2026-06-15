@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.11] - 2026-06-15
+
+### Fixed
+
+- MCP `serve` no longer blocks on full index sync before stdio is live — Cursor enablement is much faster (`AGENT_BRAIN_BOOTSTRAP_BG=0` restores blocking bootstrap).
+- Index sync skips re-embedding unchanged files (content-hash match) and only bumps `index_version` when items actually change.
+
+### Changed
+
+- Embedding model loads lazily on first embed (not at process start).
+- Default branch renamed to `master`.
+
 ## [0.3.10] - 2026-06-15
 
 ### Fixed

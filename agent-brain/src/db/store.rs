@@ -221,6 +221,18 @@ impl BrainStore {
         self.index_version.lock().map(|v| *v).unwrap_or(1)
     }
 
+    pub fn indexed_item_current_hash(&self, source_path: &str) -> Result<Option<String>> {
+        self.with_conn(|conn| {
+            conn.query_row(
+                "SELECT content_hash FROM indexed_items WHERE source_path = ?1 AND embedding IS NOT NULL LIMIT 1",
+                params![source_path],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(Into::into)
+        })
+    }
+
     pub fn upsert_indexed_item(
         &self,
         item_type: ItemType,

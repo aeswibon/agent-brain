@@ -13,6 +13,7 @@ pub struct Config {
     pub session_ingest_enabled: bool,
     pub session_max_age_days: u64,
     pub prewarm_on_bootstrap: bool,
+    pub bootstrap_background: bool,
     pub embedding_cache_enabled: bool,
     pub bm25_fast_path_enabled: bool,
     pub session_ingest_background: bool,
@@ -41,6 +42,9 @@ impl Config {
                 .unwrap_or(true),
             session_max_age_days: 90,
             prewarm_on_bootstrap: std::env::var("AGENT_BRAIN_PREWARM")
+                .map(|v| v != "0" && v != "false")
+                .unwrap_or(true),
+            bootstrap_background: std::env::var("AGENT_BRAIN_BOOTSTRAP_BG")
                 .map(|v| v != "0" && v != "false")
                 .unwrap_or(true),
             embedding_cache_enabled: std::env::var("AGENT_BRAIN_EMBEDDING_CACHE")
