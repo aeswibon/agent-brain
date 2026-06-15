@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Cursor project rule template (`install --global`) now includes route briefing visibility and macOS codesign guidance so reinstalls do not strip those sections.
+
 ## [0.3.15] - 2026-06-15
 
 ### Added
