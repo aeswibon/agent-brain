@@ -74,7 +74,7 @@ impl Config {
             embedding_model: std::env::var("AGENT_BRAIN_EMBED_MODEL").unwrap_or_else(|_| "mini".into()),
             bootstrap_startup_delay_secs: env_u64("AGENT_BRAIN_BOOTSTRAP_DELAY_SEC", 2),
             bootstrap_interval_secs: env_u64("AGENT_BRAIN_BOOTSTRAP_INTERVAL_SEC", 3600),
-            auto_update_startup_delay_secs: env_u64("AGENT_BRAIN_AUTO_UPDATE_DELAY_SEC", 300),
+            auto_update_startup_delay_secs: env_u64("AGENT_BRAIN_AUTO_UPDATE_DELAY_SEC", 60),
             session_ingest_delay_secs: env_u64("AGENT_BRAIN_SESSION_INGEST_DELAY_SEC", 180),
             route_briefing_enabled: env_bool("AGENT_BRAIN_ROUTE_BRIEFING", true),
             route_briefing_stderr: env_bool("AGENT_BRAIN_ROUTE_BRIEFING_STDERR", true),

@@ -19,6 +19,7 @@ const STATE_FILE: &str = "auto_update_state.json";
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AutoUpdateState {
     pub last_run_unix: i64,
+    pub last_mcp_check_unix: i64,
     pub last_mcp_version: Option<String>,
 }
 
@@ -81,7 +82,11 @@ pub fn run(
 
     let home = &engine.config.home;
     let mut state = AutoUpdateState::load(home);
-    if !force && !due_for_run(cfg, &state) {
+    let check_mcp = cfg.mcp.enabled
+        && (force || should_check_mcp(cfg, &state, options));
+    let check_packages = cfg.packages.enabled && (force || due_for_packages(cfg, &state));
+
+    if !check_mcp && !check_packages {
         tracing::debug!(target: "agent_brain::auto_update", "skipped (interval not elapsed)");
         return Ok(AutoUpdateReport::default());
     }
@@ -89,7 +94,7 @@ pub fn run(
     let mut report = AutoUpdateReport::default();
     let current_version = env!("CARGO_PKG_VERSION");
 
-    if cfg.mcp.enabled {
+    if check_mcp {
         match update_mcp_binary(cfg, current_version)? {
             Some(version) => {
                 report.mcp_updated = true;
@@ -98,10 +103,12 @@ pub fn run(
             }
             None => tracing::debug!(target: "agent_brain::auto_update", "mcp already current"),
         }
+        state.last_mcp_check_unix = chrono::Utc::now().timestamp();
     }
 
-    if cfg.packages.enabled {
+    if check_packages {
         report.packages_updated = update_configured_packages(engine, cfg)?;
+        state.last_run_unix = chrono::Utc::now().timestamp();
     }
 
     let will_restart = report.mcp_updated
@@ -131,7 +138,6 @@ pub fn run(
         );
     }
 
-    state.last_run_unix = chrono::Utc::now().timestamp();
     state.save(home)?;
 
     if will_restart {
@@ -155,12 +161,32 @@ pub fn run(
     Ok(report)
 }
 
-fn due_for_run(cfg: &AutoUpdateSettings, state: &AutoUpdateState) -> bool {
+fn due_for_packages(cfg: &AutoUpdateSettings, state: &AutoUpdateState) -> bool {
     if state.last_run_unix == 0 {
         return true;
     }
     let elapsed = chrono::Utc::now().timestamp() - state.last_run_unix;
     elapsed >= (cfg.interval_hours as i64) * 3600
+}
+
+/// MCP release checks are independent of package `interval_hours`.
+fn should_check_mcp(
+    cfg: &AutoUpdateSettings,
+    state: &AutoUpdateState,
+    options: AutoUpdateRunOptions,
+) -> bool {
+    if options.restart_mcp_if_serving {
+        return true;
+    }
+    let minutes = cfg.mcp.recheck_interval_minutes;
+    if minutes == 0 {
+        return true;
+    }
+    if state.last_mcp_check_unix == 0 {
+        return true;
+    }
+    let elapsed = chrono::Utc::now().timestamp() - state.last_mcp_check_unix;
+    elapsed >= (minutes as i64) * 60
 }
 
 fn update_configured_packages(engine: &Arc<Engine>, cfg: &AutoUpdateSettings) -> Result<usize> {
@@ -481,6 +507,7 @@ fn parse_version(raw: &str) -> Vec<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::settings::McpAutoUpdateSettings;
 
     #[test]
     fn restart_scheduled_only_when_serving() {
@@ -513,7 +540,7 @@ mod tests {
     }
 
     #[test]
-    fn interval_gate_respects_state() {
+    fn package_interval_gate_respects_state() {
         let cfg = AutoUpdateSettings {
             enabled: true,
             interval_hours: 24,
@@ -523,6 +550,41 @@ mod tests {
             last_run_unix: chrono::Utc::now().timestamp(),
             ..Default::default()
         };
-        assert!(!due_for_run(&cfg, &state));
+        assert!(!due_for_packages(&cfg, &state));
+    }
+
+    #[test]
+    fn mcp_check_runs_on_serve_even_when_packages_not_due() {
+        let cfg = AutoUpdateSettings {
+            enabled: true,
+            interval_hours: 24,
+            ..AutoUpdateSettings::default()
+        };
+        let state = AutoUpdateState {
+            last_run_unix: chrono::Utc::now().timestamp(),
+            ..Default::default()
+        };
+        assert!(should_check_mcp(
+            &cfg,
+            &state,
+            AutoUpdateRunOptions::background_serve()
+        ));
+    }
+
+    #[test]
+    fn cli_mcp_check_respects_recheck_interval() {
+        let cfg = AutoUpdateSettings {
+            enabled: true,
+            mcp: McpAutoUpdateSettings {
+                recheck_interval_minutes: 15,
+                ..McpAutoUpdateSettings::default()
+            },
+            ..AutoUpdateSettings::default()
+        };
+        let state = AutoUpdateState {
+            last_mcp_check_unix: chrono::Utc::now().timestamp(),
+            ..Default::default()
+        };
+        assert!(!should_check_mcp(&cfg, &state, AutoUpdateRunOptions::cli()));
     }
 }

@@ -55,6 +55,9 @@ pub struct McpAutoUpdateSettings {
     /// Minimum delay before the first idle check (lets the update log flush).
     #[serde(default = "default_restart_min_delay_secs")]
     pub restart_min_delay_secs: u64,
+    /// While `serve` is running, re-check GitHub for a newer MCP release every N minutes (0 = only on serve start).
+    #[serde(default = "default_mcp_recheck_interval_minutes")]
+    pub recheck_interval_minutes: u64,
 }
 
 fn default_restart_idle_secs() -> u64 {
@@ -67,6 +70,10 @@ fn default_restart_max_wait_secs() -> u64 {
 
 fn default_restart_min_delay_secs() -> u64 {
     2
+}
+
+fn default_mcp_recheck_interval_minutes() -> u64 {
+    15
 }
 
 fn default_interval_hours() -> u64 {
@@ -124,6 +131,7 @@ impl Default for McpAutoUpdateSettings {
             restart_idle_secs: default_restart_idle_secs(),
             restart_max_wait_secs: default_restart_max_wait_secs(),
             restart_min_delay_secs: default_restart_min_delay_secs(),
+            recheck_interval_minutes: default_mcp_recheck_interval_minutes(),
         }
     }
 }

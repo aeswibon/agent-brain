@@ -231,7 +231,7 @@ fn mcp_server_entry(exe: &Path) -> Value {
             "AGENT_BRAIN_BOOTSTRAP_BG": "1",
             "AGENT_BRAIN_BOOTSTRAP_DELAY_SEC": "2",
             "AGENT_BRAIN_BOOTSTRAP_INTERVAL_SEC": "3600",
-            "AGENT_BRAIN_AUTO_UPDATE_DELAY_SEC": "300",
+            "AGENT_BRAIN_AUTO_UPDATE_DELAY_SEC": "60",
             "AGENT_BRAIN_SESSION_INGEST_DELAY_SEC": "180"
         }
     })

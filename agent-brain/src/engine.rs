@@ -92,29 +92,38 @@ impl Engine {
         if !settings.auto_update.enabled {
             return;
         }
-        let delay = self.config.auto_update_startup_delay_secs;
+        let initial_delay = self.config.auto_update_startup_delay_secs;
+        let recheck_minutes = settings.auto_update.mcp.recheck_interval_minutes;
         let engine = Arc::clone(self);
         std::thread::spawn(move || {
-            if delay > 0 {
-                std::thread::sleep(Duration::from_secs(delay));
-            }
-            match crate::auto_update::run(
-                &engine,
-                &settings,
-                false,
-                crate::auto_update::AutoUpdateRunOptions::background_serve(),
-            ) {
-                Ok(report) if report.mcp_updated || report.packages_updated > 0 => {
-                    tracing::info!(
-                        target: "agent_brain::auto_update",
-                        packages = report.packages_updated,
-                        mcp = report.mcp_updated,
-                        reindexed = report.reindexed,
-                        "auto-update applied"
-                    );
+            let mut delay = initial_delay;
+            loop {
+                if delay > 0 {
+                    std::thread::sleep(Duration::from_secs(delay));
                 }
-                Ok(_) => {}
-                Err(err) => tracing::warn!(error = %err, "auto-update failed"),
+                match crate::auto_update::run(
+                    &engine,
+                    &settings,
+                    false,
+                    crate::auto_update::AutoUpdateRunOptions::background_serve(),
+                ) {
+                    Ok(report) if report.mcp_updated || report.packages_updated > 0 => {
+                        tracing::info!(
+                            target: "agent_brain::auto_update",
+                            packages = report.packages_updated,
+                            mcp = report.mcp_updated,
+                            reindexed = report.reindexed,
+                            "auto-update applied"
+                        );
+                    }
+                    Ok(_) => {}
+                    Err(err) => tracing::warn!(error = %err, "auto-update failed"),
+                }
+                if recheck_minutes == 0 {
+                    break;
+                }
+                delay = 0;
+                std::thread::sleep(Duration::from_secs(recheck_minutes * 60));
             }
         });
     }
