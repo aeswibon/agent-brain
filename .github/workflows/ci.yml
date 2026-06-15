@@ -7,25 +7,17 @@ on:
     branches: [main, master]
   workflow_dispatch:
 
-env:
-  CARGO_TERM_COLOR: always
-  RUST_BACKTRACE: 1
+permissions:
+  actions: write
 
 jobs:
-  test:
-    name: Test
+  run-pipeline:
+    name: Run CI pipeline
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
 
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@v2.9.1
-
-      - name: Run tests
-        run: cargo test --release -p agent-brain
-
-  build:
-    name: Build
-    needs: test
-    uses: ./.github/workflows/reusable-build.yml
+      - uses: aeswibon/pipeline-compose-run@v1.1.0
+        with:
+          pipeline_file: .github/pipelines/ci.yml
+          github_token: ${{ github.token }}

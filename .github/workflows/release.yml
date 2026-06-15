@@ -17,5 +17,5 @@ jobs:
 
       - uses: aeswibon/pipeline-compose-run@v1.1.0
         with:
-          pipeline_file: .github/pipelines/pipeline.yml
+          pipeline_file: .github/pipelines/release.yml
           github_token: ${{ github.token }}

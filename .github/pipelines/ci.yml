@@ -1,0 +1,15 @@
+version: 2
+companion_workflows:
+  - .github/workflows/ci.yml
+  - .github/workflows/release.yml
+  - .github/workflows/reusable-build.yml
+pipelines:
+  ci:
+    stages:
+      - id: test
+        workflow: .github/workflows/stage-test.yml
+
+      - id: build
+        workflow: .github/workflows/stage-build.yml
+        needs:
+          - test

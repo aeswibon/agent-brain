@@ -1,7 +1,8 @@
 version: 2
 companion_workflows:
-  - .github/workflows/release.yml
   - .github/workflows/ci.yml
+  - .github/workflows/release.yml
+  - .github/workflows/reusable-build.yml
 pipelines:
   release:
     stages:
