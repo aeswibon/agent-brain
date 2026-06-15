@@ -7,7 +7,7 @@ use rusqlite::{params, Connection, OptionalExtension};
 use uuid::Uuid;
 
 use crate::db::migrations;
-use crate::embed::{dot_product, normalize_embedding};
+use crate::embed::{batch_dot_products, normalize_embedding};
 use crate::types::{ItemType, ScoredItem};
 
 const BM25_ITEMS_TOP: usize = 150;
@@ -394,6 +394,31 @@ impl BrainStore {
         })
     }
 
+    pub fn ensure_embedding_model(&self, model_id: &str) -> Result<bool> {
+        let current = self.get_meta("embedding_model")?;
+        if current.as_deref() == Some(model_id) {
+            return Ok(false);
+        }
+        if current.is_none() {
+            self.set_meta("embedding_model", model_id)?;
+            return Ok(false);
+        }
+        self.with_conn(|conn| {
+            conn.execute("UPDATE indexed_items SET embedding = NULL", [])?;
+            conn.execute("DELETE FROM query_embeddings", [])?;
+            Ok(())
+        })?;
+        self.set_meta("embedding_model", model_id)?;
+        self.invalidate_search_cache();
+        self.bump_index_version()?;
+        tracing::info!(
+            target: "agent_brain::index",
+            model = model_id,
+            "embedding model changed; cleared cached vectors for re-index"
+        );
+        Ok(true)
+    }
+
     pub fn get_meta(&self, key: &str) -> Result<Option<String>> {
         self.with_conn(|conn| {
             conn.query_row("SELECT value FROM meta WHERE key = ?1", params![key], |r| {
@@ -616,16 +641,19 @@ impl BrainStore {
         }
 
         let candidate_count = candidates.len();
+        let cosine_sims: Vec<f64> = if bm25_only || query_embedding.is_empty() {
+            vec![0.0; candidate_count]
+        } else {
+            let emb_refs: Vec<Option<&[f32]>> = candidates
+                .iter()
+                .map(|row| row.embedding.as_deref())
+                .collect();
+            batch_dot_products(query_embedding, &emb_refs)
+        };
+
         let mut scored = Vec::with_capacity(candidate_count);
-        for row in candidates {
+        for (row, cosine_sim) in candidates.into_iter().zip(cosine_sims) {
             let item_type = ItemType::parse(&row.item_type).unwrap_or(ItemType::Rule);
-            let cosine_sim = if bm25_only {
-                0.0
-            } else if let Some(emb) = &row.embedding {
-                dot_product(query_embedding, emb)
-            } else {
-                0.0
-            };
 
             let bm25_norm = bm25
                 .bm25_map

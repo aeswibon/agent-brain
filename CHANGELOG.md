@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.8] - 2026-06-15
+
+### Added
+
+- Batched SIMD-friendly dot-product scoring for all FTS candidates in one pass
+- Configurable embedding model via `AGENT_BRAIN_EMBED_MODEL` (`mini`, `fast`/`mini-q`, `bge-small`, `bge-small-q`); auto-clears stale vectors on model change
+
+### Changed
+
+- Query embedding cache and index vectors invalidate when the embedding model changes
+
 ## [0.3.7] - 2026-06-15
 
 ### Added

@@ -17,6 +17,7 @@ pub struct Config {
     pub bm25_fast_path_enabled: bool,
     pub session_ingest_background: bool,
     pub turn_cache_ignore_open_files: bool,
+    pub embedding_model: String,
 }
 
 impl Config {
@@ -54,6 +55,7 @@ impl Config {
             turn_cache_ignore_open_files: std::env::var("AGENT_BRAIN_TURN_CACHE_OPEN_FILES")
                 .map(|v| v == "1" || v == "true")
                 .unwrap_or(false),
+            embedding_model: std::env::var("AGENT_BRAIN_EMBED_MODEL").unwrap_or_else(|_| "mini".into()),
             home,
             data_dir,
         })

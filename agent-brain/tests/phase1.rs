@@ -28,6 +28,7 @@ fn test_config(dir: &TempDir) -> Config {
         bm25_fast_path_enabled: true,
         session_ingest_background: false,
         turn_cache_ignore_open_files: true,
+        embedding_model: "mini".into(),
     }
 }
 

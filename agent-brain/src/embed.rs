@@ -3,15 +3,24 @@ use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
 
 pub struct Embedder {
     model: TextEmbedding,
+    pub model_id: &'static str,
 }
 
 impl Embedder {
     pub fn new() -> Result<Self> {
-        let model = TextEmbedding::try_new(
-            InitOptions::new(EmbeddingModel::AllMiniLML6V2).with_show_download_progress(false),
+        Self::with_model(EmbeddingModel::AllMiniLML6V2)
+    }
+
+    pub fn with_model(model: EmbeddingModel) -> Result<Self> {
+        let model_id = embedding_model_name(&model);
+        let inner = TextEmbedding::try_new(
+            InitOptions::new(model).with_show_download_progress(false),
         )
         .context("init fastembed")?;
-        Ok(Self { model })
+        Ok(Self {
+            model: inner,
+            model_id,
+        })
     }
 
     pub fn dim(&self) -> usize {
@@ -34,6 +43,26 @@ impl Embedder {
         let mut emb = self.embed(&[text.to_string()])?.remove(0);
         l2_normalize(&mut emb);
         Ok(emb)
+    }
+}
+
+pub fn parse_embedding_model(name: &str) -> EmbeddingModel {
+    match name.trim().to_ascii_lowercase().as_str() {
+        "fast" | "mini-q" | "6v2q" => EmbeddingModel::AllMiniLML6V2Q,
+        "bge-small" | "bge_small" | "small" => EmbeddingModel::BGESmallENV15,
+        "bge-small-q" | "bge_small_q" | "fast-bge" => EmbeddingModel::BGESmallENV15Q,
+        "mini" | "default" | "6v2" => EmbeddingModel::AllMiniLML6V2,
+        _ => EmbeddingModel::AllMiniLML6V2,
+    }
+}
+
+pub fn embedding_model_name(model: &EmbeddingModel) -> &'static str {
+    match model {
+        EmbeddingModel::AllMiniLML6V2Q => "mini-q",
+        EmbeddingModel::BGESmallENV15 => "bge-small",
+        EmbeddingModel::BGESmallENV15Q => "bge-small-q",
+        EmbeddingModel::AllMiniLML6V2 => "mini",
+        _ => "mini",
     }
 }
 
@@ -62,14 +91,42 @@ pub fn normalize_embedding(mut v: Vec<f32>) -> Vec<f32> {
 
 /// Dot product for unit vectors (cosine similarity).
 pub fn dot_product(a: &[f32], b: &[f32]) -> f64 {
+    dot_product_simd(a, b)
+}
+
+/// Batched dot products against a unit query vector.
+pub fn batch_dot_products(query: &[f32], embeddings: &[Option<&[f32]>]) -> Vec<f64> {
+    embeddings
+        .iter()
+        .map(|emb| match emb {
+            Some(e) if e.len() == query.len() => dot_product_simd(query, e),
+            _ => 0.0,
+        })
+        .collect()
+}
+
+fn dot_product_simd(a: &[f32], b: &[f32]) -> f64 {
     if a.len() != b.len() || a.is_empty() {
         return 0.0;
     }
-    let mut dot = 0.0f64;
-    for (x, y) in a.iter().zip(b.iter()) {
-        dot += (*x as f64) * (*y as f64);
+    let mut sum0 = 0.0f32;
+    let mut sum1 = 0.0f32;
+    let mut sum2 = 0.0f32;
+    let mut sum3 = 0.0f32;
+    let mut i = 0;
+    while i + 4 <= a.len() {
+        sum0 += a[i] * b[i];
+        sum1 += a[i + 1] * b[i + 1];
+        sum2 += a[i + 2] * b[i + 2];
+        sum3 += a[i + 3] * b[i + 3];
+        i += 4;
     }
-    dot
+    let mut sum = sum0 + sum1 + sum2 + sum3;
+    while i < a.len() {
+        sum += a[i] * b[i];
+        i += 1;
+    }
+    sum as f64
 }
 
 pub fn cosine(a: &[f32], b: &[f32]) -> f64 {
@@ -105,5 +162,28 @@ mod tests {
         let dot = dot_product(&a, &b);
         let cos = cosine(&a, &b);
         assert!((dot - cos).abs() < 1e-6);
+    }
+
+    #[test]
+    fn batch_dots_match_scalar() {
+        let query = vec![0.6, 0.8];
+        let a = vec![1.0, 0.0];
+        let b = vec![0.0, 1.0];
+        let batch = batch_dot_products(&query, &[Some(a.as_slice()), Some(b.as_slice()), None]);
+        assert!((batch[0] - dot_product(&query, &a)).abs() < 1e-6);
+        assert!((batch[1] - dot_product(&query, &b)).abs() < 1e-6);
+        assert_eq!(batch[2], 0.0);
+    }
+
+    #[test]
+    fn parses_embedding_model_aliases() {
+        assert!(matches!(
+            parse_embedding_model("fast"),
+            EmbeddingModel::AllMiniLML6V2Q
+        ));
+        assert!(matches!(
+            parse_embedding_model("bge-small"),
+            EmbeddingModel::BGESmallENV15
+        ));
     }
 }

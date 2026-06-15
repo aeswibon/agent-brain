@@ -11,7 +11,7 @@ use crate::cache::{route_cache_key, fingerprint_query, QueryEmbeddingCache, Turn
 use crate::config::Config;
 use crate::db::store::{content_hash, BrainStore};
 use crate::db::{RouteLatencyStats, RouteTiming};
-use crate::embed::Embedder;
+use crate::embed::{parse_embedding_model, Embedder};
 use crate::index;
 use crate::tokens::estimate_json_tokens;
 use crate::types::{
@@ -35,7 +35,15 @@ impl Engine {
     pub fn new(config: Config) -> Result<Self> {
         config.ensure_dirs()?;
         let store = Arc::new(BrainStore::open(&config.db_path)?);
-        let embedder = Arc::new(Embedder::new()?);
+        let embed_model = parse_embedding_model(&config.embedding_model);
+        let embedder = Arc::new(Embedder::with_model(embed_model)?);
+        if store.ensure_embedding_model(embedder.model_id)? {
+            tracing::info!(
+                target: "agent_brain::index",
+                model = embedder.model_id,
+                "run index to refresh embeddings after model change"
+            );
+        }
         let cache = Arc::new(TurnCache::new(64, config.turn_ttl_secs));
         Ok(Self {
             auto_capture_enabled: config.auto_capture_enabled,
