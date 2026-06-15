@@ -64,6 +64,8 @@ pub fn init_git_repo(home: &Path, remote: Option<&str>, branch: &str) -> Result<
         run_git(&root, &["init", "-b", branch])?;
     }
 
+    ensure_git_identity(&root)?;
+
     write_sync_readme(&root)?;
     write_gitignore(&root)?;
 
@@ -121,6 +123,8 @@ pub fn git_push(store: &BrainStore, home: &Path, settings: &GitSyncSettings) -> 
         bail!("sync.git.remote is not set in config.yaml");
     }
 
+    ensure_git_identity(&root)?;
+
     let remote = settings.remote.as_str();
     if git_config_value(&root, "remote.origin.url")?.is_none() {
         run_git(&root, &["remote", "add", "origin", remote])?;
@@ -174,6 +178,16 @@ pub fn git_pull(
         MergePolicy::NewerWins,
         SyncSource::Git,
     )
+}
+
+fn ensure_git_identity(repo: &Path) -> Result<()> {
+    if git_config_value(repo, "user.email")?.is_none() {
+        run_git(repo, &["config", "user.email", "agent-brain@sync.local"])?;
+    }
+    if git_config_value(repo, "user.name")?.is_none() {
+        run_git(repo, &["config", "user.name", "agent-brain"])?;
+    }
+    Ok(())
 }
 
 fn write_sync_readme(root: &Path) -> Result<()> {
