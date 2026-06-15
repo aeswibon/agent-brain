@@ -1,5 +1,6 @@
-//! HACK: one-off ingest of legacy Cursor/Codex chat transcripts into memory.
-//! Remove this module when proper session digests land (planned 0.4.x).
+//! Session transcript import: structured digests (default) and optional legacy snippet ingest.
+
+mod digest;
 
 use std::fs;
 use std::io::{BufRead, BufReader};
@@ -18,6 +19,22 @@ const META_PREFIX: &str = "session_ingest:";
 const MAX_FILES_PER_RUN: usize = 150;
 const MAX_USER_MSGS_PER_FILE: usize = 12;
 const MAX_WORDS: usize = 50;
+
+/// Default session import: structured digests. Legacy snippet ingest is opt-in.
+pub fn ingest_sessions(
+    store: &BrainStore,
+    embedder: &Embedder,
+    config: &Config,
+) -> Result<usize> {
+    if !config.session_ingest_enabled {
+        return Ok(0);
+    }
+    let mut total = digest::ingest_session_digests(store, embedder, config)?;
+    if config.session_ingest_legacy {
+        total += ingest_legacy_sessions(store, embedder, config)?;
+    }
+    Ok(total)
+}
 
 pub fn ingest_legacy_sessions(
     store: &BrainStore,
@@ -43,7 +60,7 @@ pub fn ingest_legacy_sessions(
     Ok(ingested)
 }
 
-fn discover_session_files(config: &Config) -> Result<Vec<PathBuf>> {
+pub(crate) fn discover_session_files(config: &Config) -> Result<Vec<PathBuf>> {
     let mut paths = Vec::new();
     let Some(home) = dirs::home_dir() else {
         return Ok(paths);
@@ -142,6 +159,7 @@ fn ingest_file_if_changed(
             "session_import",
             &hash,
             &embedding,
+            "positive",
         )?;
         if res.stored {
             count += 1;
@@ -152,7 +170,7 @@ fn ingest_file_if_changed(
     Ok(count)
 }
 
-fn extract_user_text(line: &str) -> Option<String> {
+pub(crate) fn extract_user_text(line: &str) -> Option<String> {
     let v: serde_json::Value = serde_json::from_str(line).ok()?;
     if v.get("role").and_then(|r| r.as_str()) != Some("user") {
         return None;

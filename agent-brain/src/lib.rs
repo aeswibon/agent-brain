@@ -10,6 +10,7 @@ pub mod index;
 pub mod install;
 pub mod mcp;
 pub mod packages;
+pub mod observability;
 pub mod route_briefing;
 pub mod sessions;
 pub mod settings;

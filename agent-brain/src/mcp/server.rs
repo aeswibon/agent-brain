@@ -43,6 +43,7 @@ impl BrainMcp {
                     }
                     let hash = content_hash(&payload.fact);
                     let embedding = embedder.embed_one(&format!("{} {}", payload.topic, payload.fact))?;
+                    let polarity = payload.polarity.as_deref().unwrap_or("positive");
                     let res = store.store_fact(
                         &payload.topic,
                         &payload.fact,
@@ -52,6 +53,7 @@ impl BrainMcp {
                         "agent",
                         &hash,
                         &embedding,
+                        polarity,
                     )?;
                     cache.clear();
                     store.bump_index_version().ok();
@@ -103,6 +105,8 @@ struct RouteTaskParams {
     #[serde(default = "default_route_limits", deserialize_with = "deserialize_route_limits")]
     #[schemars(default = "default_route_limits")]
     limits: RouteLimits,
+    #[serde(default)]
+    phase: Option<String>,
 }
 
 fn default_route_limits() -> RouteLimits {
@@ -145,6 +149,8 @@ struct StoreMemoryParams {
     scope: String,
     #[serde(default)]
     confidence: f64,
+    #[serde(default)]
+    polarity: Option<String>,
 }
 
 fn default_scope() -> String {
@@ -179,6 +185,20 @@ struct ExportMemoryParams {
     filename: Option<String>,
 }
 
+#[derive(Debug, Deserialize, JsonSchema)]
+struct ReportContextUsefulParams {
+    item_ids: Vec<String>,
+    useful: bool,
+    #[serde(default)]
+    reason: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct ExplainLastContextParams {
+    #[serde(default)]
+    log_id: Option<String>,
+}
+
 #[tool_router]
 impl BrainMcp {
     #[tool(description = "REQUIRED every turn before planning or edits. Returns ranked agents, skills, rules, and memory under a token budget. Pass user_message, current_working_directory, and open_files.")]
@@ -200,6 +220,7 @@ impl BrainMcp {
                 &p.open_files,
                 p.max_tokens,
                 p.limits.normalize(),
+                p.phase.as_deref(),
             )
             .map_err(|e| McpError::internal_error(format!("{e}"), None))?;
         json_result(resp)
@@ -255,6 +276,8 @@ impl BrainMcp {
             .and_then(|c| crate::config::find_repo_root(&c))
             .map(|p| p.display().to_string());
 
+        let polarity = p.polarity.or_else(|| infer_memory_polarity(&p.fact));
+
         let (tx, rx) = std::sync::mpsc::channel();
         self.write_queue
             .send(WriteOp::StoreMemory {
@@ -265,6 +288,7 @@ impl BrainMcp {
                     scope: p.scope,
                     scope_key,
                     confidence: if p.confidence == 0.0 { 0.9 } else { p.confidence },
+                    polarity,
                 },
             })
             .map_err(|e| McpError::internal_error(format!("{e}"), None))?;
@@ -331,6 +355,39 @@ impl BrainMcp {
             .map_err(|e| McpError::internal_error(format!("{e}"), None))?;
         json_result(serde_json::json!({ "path": written }))
     }
+
+    #[tool(description = "Report whether retrieved context items were useful (feedback loop).")]
+    async fn report_context_useful(
+        &self,
+        params: Parameters<ReportContextUsefulParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let _req = self.engine.mcp_activity.begin_request();
+        let p = params.0;
+        let updated = self
+            .engine
+            .store
+            .record_context_feedback(&p.item_ids, p.useful)
+            .map_err(|e| McpError::internal_error(format!("{e}"), None))?;
+        json_result(serde_json::json!({
+            "updated": updated,
+            "useful": p.useful,
+            "reason": p.reason
+        }))
+    }
+
+    #[tool(description = "Explain the last route_task retrieval (or a specific log_id).")]
+    async fn explain_last_context(
+        &self,
+        params: Parameters<ExplainLastContextParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let _req = self.engine.mcp_activity.begin_request();
+        let explain = crate::observability::explain_last(
+            &self.engine.store,
+            params.0.log_id.as_deref(),
+        )
+        .map_err(|e| McpError::internal_error(format!("{e}"), None))?;
+        json_result(serde_json::json!({ "context": explain }))
+    }
 }
 
 #[tool_handler]
@@ -360,6 +417,15 @@ fn json_result<T: serde::Serialize>(value: T) -> Result<CallToolResult, McpError
     let text = serde_json::to_string(&value)
         .map_err(|e| McpError::internal_error(format!("{e}"), None))?;
     Ok(CallToolResult::success(vec![Content::text(text)]))
+}
+
+fn infer_memory_polarity(fact: &str) -> Option<String> {
+    let lower = fact.to_lowercase();
+    if lower.contains("do not") || lower.starts_with("never ") || lower.contains("never use") {
+        Some("negative".into())
+    } else {
+        None
+    }
 }
 
 pub async fn run_stdio(engine: Arc<Engine>) -> Result<()> {

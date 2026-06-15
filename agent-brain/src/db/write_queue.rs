@@ -26,6 +26,7 @@ pub mod store_memory_payload {
         pub scope: String,
         pub scope_key: Option<String>,
         pub confidence: f64,
+        pub polarity: Option<String>,
     }
 }
 

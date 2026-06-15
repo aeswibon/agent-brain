@@ -22,6 +22,8 @@ fn test_config(dir: &TempDir) -> Config {
         turn_ttl_secs: 60,
         auto_capture_enabled: true,
         session_ingest_enabled: false,
+        session_digest_enabled: true,
+        session_ingest_legacy: false,
         session_max_age_days: 90,
         prewarm_on_bootstrap: false,
         bootstrap_background: false,
@@ -74,6 +76,7 @@ fn deduplicates_identical_facts() {
             "agent",
             &hash,
             &emb,
+            "positive",
         )
         .unwrap();
     assert!(first.stored);
@@ -89,6 +92,7 @@ fn deduplicates_identical_facts() {
             "agent",
             &hash,
             &emb,
+            "positive",
         )
         .unwrap();
     assert!(!second.stored);
@@ -114,6 +118,7 @@ fn supersedes_same_topic_facts() {
             "agent",
             &content_hash("Run clippy on every PR"),
             &emb,
+            "positive",
         )
         .unwrap();
     let v2 = store
@@ -126,6 +131,7 @@ fn supersedes_same_topic_facts() {
             "agent",
             &content_hash("Run clippy and fmt on every PR"),
             &emb,
+            "positive",
         )
         .unwrap();
 
@@ -265,6 +271,7 @@ fn route_task_respects_max_tokens() {
                 rules: 5,
                 memory: 5,
             },
+            None,
         )
         .unwrap();
 
@@ -336,6 +343,7 @@ fn dedupes_duplicate_skill_names_in_route_task() {
                 rules: 0,
                 memory: 0,
             },
+            None,
         )
         .unwrap();
 
@@ -497,6 +505,7 @@ fn route_task_with_all_zero_limits_returns_skills() {
                 rules: 0,
                 memory: 0,
             },
+            None,
         )
         .unwrap();
 

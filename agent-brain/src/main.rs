@@ -204,6 +204,59 @@ async fn main() -> Result<()> {
             let fix = args.iter().any(|a| a == "--fix");
             doctor::run(fix)?;
         }
+        "inspect" => {
+            let config = Config::load()?;
+            let store = agent_brain::db::store::BrainStore::open(&config.db_path)?;
+            let sub = args.get(2).map(String::as_str).unwrap_or("log");
+            match sub {
+                "log" => {
+                    let last = args.iter().any(|a| a == "--last");
+                    if last {
+                        if let Some(row) = store.latest_retrieval_log()? {
+                            println!("{}", agent_brain::observability::format_inspect_log(&row));
+                            println!("items: {}", row.items_json);
+                        } else {
+                            eprintln!("No retrieval logs yet.");
+                            std::process::exit(1);
+                        }
+                    } else {
+                        let limit = flag_value(&args, "--limit")
+                            .and_then(|s| s.parse().ok())
+                            .unwrap_or(10);
+                        for row in store.list_retrieval_logs(limit)? {
+                            println!("{}", agent_brain::observability::format_inspect_log(&row));
+                        }
+                    }
+                }
+                "fact" => {
+                    let id = args
+                        .get(3)
+                        .context("usage: agent-brain inspect fact <id>")?;
+                    match store.get_fact(id)? {
+                        Some(f) => println!("{}", serde_json::to_string_pretty(&f)?),
+                        None => {
+                            eprintln!("Fact not found: {id}");
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                "conflicts" => {
+                    let limit = flag_value(&args, "--limit")
+                        .and_then(|s| s.parse().ok())
+                        .unwrap_or(20);
+                    for row in store.list_conflicts(limit)? {
+                        println!("{}", serde_json::to_string(&row)?);
+                    }
+                }
+                _ => {
+                    eprintln!("Unknown inspect subcommand: {sub}");
+                    eprintln!("Usage: agent-brain inspect log [--last] [--limit N]");
+                    eprintln!("       agent-brain inspect fact <id>");
+                    eprintln!("       agent-brain inspect conflicts [--limit N]");
+                    std::process::exit(1);
+                }
+            }
+        }
         "help" | "--help" | "-h" => {
             print_usage();
         }
@@ -244,6 +297,9 @@ Usage:
   agent-brain briefing                        Print last human-readable route summary
   agent-brain doctor                          Check MCP install, binary, hooks, codesign
   agent-brain doctor --fix                    Re-sign binary (macOS), align mcp.json, refresh hooks
+  agent-brain inspect log [--last]            List retrieval logs (what route_task returned)
+  agent-brain inspect fact <id>               Show a stored memory fact
+  agent-brain inspect conflicts [--limit N]   Show topic supersession conflict log
   agent-brain --version                       Same as version (prints version only)
 
 Examples:

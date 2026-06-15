@@ -40,6 +40,8 @@ pub struct ScoredItem {
     pub source_path: Option<String>,
     pub scope: String,
     pub score: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub polarity: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

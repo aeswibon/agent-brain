@@ -64,13 +64,13 @@ impl Engine {
     pub fn bootstrap(self: &Arc<Self>, cwd: Option<&Path>) -> Result<usize> {
         let mut n = index::sync_index(&self.store, &self.config, &self.embedder, cwd)?;
         if self.config.session_ingest_enabled && !self.config.session_ingest_background {
-            let sessions = crate::sessions::ingest_legacy_sessions(
+            let sessions = crate::sessions::ingest_sessions(
                 &self.store,
                 &self.embedder,
                 &self.config,
             )?;
             if sessions > 0 {
-                tracing::info!("session ingest: imported {sessions} legacy snippets");
+                tracing::info!("session ingest: imported {sessions} session facts");
                 self.store.bump_index_version()?;
             }
             n += sessions;
@@ -138,7 +138,7 @@ impl Engine {
             if delay > 0 {
                 std::thread::sleep(Duration::from_secs(delay));
             }
-            match crate::sessions::ingest_legacy_sessions(
+            match crate::sessions::ingest_sessions(
                 &engine.store,
                 &engine.embedder,
                 &engine.config,
@@ -259,6 +259,7 @@ impl Engine {
         repo_root: Option<&str>,
         tags: &[String],
         boost_agents: bool,
+        phase: &str,
     ) -> Result<(Vec<ScoredItem>, usize, usize, u64, u64, bool, bool)> {
         let query_owned = query.to_string();
         let store = Arc::clone(&self.store);
@@ -288,6 +289,7 @@ impl Engine {
             tags,
             boost_agents,
             bm25_fast_path,
+            Some(phase),
         )?;
         let score_us = score_started.elapsed().as_micros() as u64;
 
@@ -309,11 +311,15 @@ impl Engine {
         open_files: &[String],
         max_tokens: usize,
         limits: RouteLimits,
+        explicit_phase: Option<&str>,
     ) -> Result<RouteTaskResponse> {
         let limits = limits.normalize();
         let started = Instant::now();
         let ws = probe(cwd);
-        let phase = infer_phase(user_message);
+        let phase = explicit_phase
+            .filter(|p| !p.is_empty() && *p != "unknown")
+            .map(|p| p.to_string())
+            .unwrap_or_else(|| infer_phase(user_message));
         let scope_key = ws.repo_root.clone().unwrap_or_default();
         let cache_warm = self.warmed.load(Ordering::Relaxed);
 
@@ -354,10 +360,11 @@ impl Engine {
                 ws.repo_root.as_deref(),
                 &ws.tags,
                 agent_boost_keywords(user_message),
+                &phase,
             )?;
 
         let build_started = Instant::now();
-        let mut resp = build_route_response(scored, &limits, &phase, max_tokens);
+        let mut resp = build_route_response(&scored, &limits, &phase, max_tokens);
         let build_us = build_started.elapsed().as_micros() as u64;
 
         let total_us = started.elapsed().as_micros() as u64;
@@ -384,6 +391,19 @@ impl Engine {
         if !is_empty_route_response(&resp) {
             self.cache.put(cache_key, resp.clone());
         }
+
+        if let Err(err) = crate::observability::log_route(
+            &self.store,
+            &resp.log_id,
+            user_message,
+            &phase,
+            &resp,
+            &scored,
+            false,
+        ) {
+            tracing::warn!(error = %err, "retrieval log write failed");
+        }
+
         Ok(self.finish_route_response(resp))
     }
 
@@ -415,6 +435,7 @@ impl Engine {
             ws.repo_root.as_deref(),
             &ws.tags,
             false,
+            &infer_phase(task_description),
         )?;
 
         let mut items = Vec::new();
@@ -456,7 +477,7 @@ impl Engine {
 }
 
 fn build_route_response(
-    scored: Vec<ScoredItem>,
+    scored: &[ScoredItem],
     limits: &RouteLimits,
     phase: &str,
     max_tokens: usize,
@@ -469,7 +490,7 @@ fn build_route_response(
     let mut state = RouteBuildState::default();
 
     // Pass 1: agents, skills, rules — before memory consumes the token budget.
-    for item in &scored {
+    for item in scored.iter() {
         if matches!(item.item_type, ItemType::Memory) {
             continue;
         }
@@ -477,7 +498,7 @@ fn build_route_response(
     }
 
     // Pass 2: memory with whatever budget remains.
-    for item in &scored {
+    for item in scored.iter() {
         if !matches!(item.item_type, ItemType::Memory) {
             continue;
         }
@@ -567,7 +588,10 @@ fn try_add_route_item(
         PendingRec::Skill(rec) => resp.recommended_skills.push(rec),
         PendingRec::Rule(rec) => resp.applicable_rules.push(rec),
         PendingRec::Memory(rec) => {
-            if item.text.to_lowercase().contains("do not") {
+            let is_negative = item.polarity.as_deref() == Some("negative")
+                || item.text.to_lowercase().contains("do not")
+                || item.text.to_lowercase().contains("never ");
+            if is_negative && item.score > 0.6 && resp.must_apply.len() < 3 {
                 resp.must_apply.push(MustApply {
                     topic: item.topic.clone(),
                     text: item.text.chars().take(200).collect(),

@@ -11,6 +11,8 @@ pub struct Config {
     pub turn_ttl_secs: u64,
     pub auto_capture_enabled: bool,
     pub session_ingest_enabled: bool,
+    pub session_digest_enabled: bool,
+    pub session_ingest_legacy: bool,
     pub session_max_age_days: u64,
     pub prewarm_on_bootstrap: bool,
     pub bootstrap_background: bool,
@@ -52,6 +54,12 @@ impl Config {
             session_ingest_enabled: std::env::var("AGENT_BRAIN_SESSION_INGEST")
                 .map(|v| v != "0" && v != "false")
                 .unwrap_or(true),
+            session_digest_enabled: std::env::var("AGENT_BRAIN_SESSION_DIGEST")
+                .map(|v| v != "0" && v != "false")
+                .unwrap_or(true),
+            session_ingest_legacy: std::env::var("AGENT_BRAIN_SESSION_INGEST_LEGACY")
+                .map(|v| v == "1" || v == "true")
+                .unwrap_or(false),
             session_max_age_days: 90,
             prewarm_on_bootstrap: std::env::var("AGENT_BRAIN_PREWARM")
                 .map(|v| v != "0" && v != "false")

@@ -101,5 +101,74 @@ pub fn run(conn: &Connection) -> rusqlite::Result<()> {
         )?;
     }
 
+    let version: i64 = conn
+        .query_row("SELECT version FROM schema_version LIMIT 1", [], |r| r.get(0))
+        .unwrap_or(0);
+
+    if version < 2 {
+        migrate_v2(conn)?;
+        conn.execute("UPDATE schema_version SET version = 2", [])?;
+    }
+
+    Ok(())
+}
+
+fn column_exists(conn: &Connection, table: &str, column: &str) -> rusqlite::Result<bool> {
+    let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})"))?;
+    let mut rows = stmt.query([])?;
+    while let Some(row) = rows.next()? {
+        let name: String = row.get(1)?;
+        if name == column {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn migrate_v2(conn: &Connection) -> rusqlite::Result<()> {
+    if !column_exists(conn, "facts", "polarity")? {
+        conn.execute(
+            "ALTER TABLE facts ADD COLUMN polarity TEXT NOT NULL DEFAULT 'positive'",
+            [],
+        )?;
+    }
+
+    conn.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS conflict_log (
+            id TEXT PRIMARY KEY,
+            timestamp INTEGER NOT NULL,
+            sync_source TEXT NOT NULL DEFAULT 'local',
+            topic TEXT NOT NULL,
+            scope TEXT NOT NULL,
+            scope_key TEXT,
+            loser_id TEXT NOT NULL,
+            loser_fact TEXT NOT NULL,
+            winner_id TEXT NOT NULL,
+            winner_fact TEXT NOT NULL,
+            resolution TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS retrieval_log (
+            id TEXT PRIMARY KEY,
+            timestamp INTEGER NOT NULL,
+            query_hash TEXT NOT NULL,
+            phase TEXT NOT NULL,
+            items_returned TEXT NOT NULL,
+            tokens_used INTEGER NOT NULL,
+            truncated INTEGER NOT NULL,
+            cache_hit INTEGER NOT NULL,
+            latency_ms INTEGER NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS context_weights (
+            item_id TEXT PRIMARY KEY,
+            weight REAL NOT NULL DEFAULT 1.0,
+            useful_count INTEGER NOT NULL DEFAULT 0,
+            useless_count INTEGER NOT NULL DEFAULT 0,
+            last_used_at INTEGER
+        );
+        "#,
+    )?;
     Ok(())
 }

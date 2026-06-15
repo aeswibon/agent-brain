@@ -51,6 +51,7 @@ struct CachedRow {
     scope_key: Option<String>,
     embedding: Option<Vec<f32>>,
     updated_at: i64,
+    polarity: Option<String>,
 }
 
 pub struct BrainStore {
@@ -159,6 +160,7 @@ impl BrainStore {
                             .get::<_, Option<Vec<u8>>>(7)?
                             .map(|b| normalize_embedding(bytes_to_f32(&b))),
                         updated_at: row.get(8)?,
+                        polarity: None,
                     })
                 })?
                 .collect::<Result<Vec<_>, _>>()?;
@@ -170,7 +172,7 @@ impl BrainStore {
         self.with_conn(|conn| {
             let now = chrono::Utc::now().timestamp_millis();
             let mut stmt = conn.prepare(
-                r#"SELECT id, topic, fact, scope, scope_key, updated_at
+                r#"SELECT id, topic, fact, scope, scope_key, updated_at, polarity
                    FROM facts WHERE superseded_by IS NULL AND (expires_at IS NULL OR expires_at > ?1)"#,
             )?;
             let rows = stmt
@@ -185,6 +187,7 @@ impl BrainStore {
                         scope_key: row.get(4)?,
                         embedding: None,
                         updated_at: row.get(5)?,
+                        polarity: row.get(6)?,
                     })
                 })?
                 .collect::<Result<Vec<_>, _>>()?;
@@ -461,7 +464,13 @@ impl BrainStore {
         source: &str,
         content_hash: &str,
         embedding: &[f32],
+        polarity: &str,
     ) -> Result<StoreFactResult> {
+        let polarity = if polarity == "negative" {
+            "negative"
+        } else {
+            "positive"
+        };
         let now = chrono::Utc::now().timestamp_millis();
         let expires = now + 90 * 24 * 3600 * 1000;
         let id = Uuid::new_v4().to_string();
@@ -484,25 +493,44 @@ impl BrainStore {
             });
         }
 
-        self.with_conn(|conn| {
-            if let Some(old_id) = conn
+        let superseded: Option<(String, String)> = self.with_conn(|conn| {
+            Ok(conn
                 .query_row(
-                    "SELECT id FROM facts WHERE topic = ?1 AND scope = ?2 AND IFNULL(scope_key,'') = IFNULL(?3,'') AND superseded_by IS NULL",
+                    "SELECT id, fact FROM facts WHERE topic = ?1 AND scope = ?2 AND IFNULL(scope_key,'') = IFNULL(?3,'') AND superseded_by IS NULL",
                     params![topic, scope, scope_key],
-                    |r| r.get::<_, String>(0),
+                    |r| Ok((r.get(0)?, r.get(1)?)),
                 )
-                .optional()?
-            {
+                .optional()?)
+        })?;
+
+        self.with_conn(|conn| {
+            if let Some((old_id, old_fact)) = &superseded {
                 conn.execute(
                     "UPDATE facts SET superseded_by = ?1 WHERE id = ?2",
                     params![id, old_id],
                 )?;
+                let conflict_id = Uuid::new_v4().to_string();
+                conn.execute(
+                    r#"INSERT INTO conflict_log (id, timestamp, sync_source, topic, scope, scope_key, loser_id, loser_fact, winner_id, winner_fact, resolution)
+                       VALUES (?1,?2,'local',?3,?4,?5,?6,?7,?8,?9,'superseded')"#,
+                    params![
+                        conflict_id,
+                        now,
+                        topic,
+                        scope,
+                        scope_key,
+                        old_id,
+                        old_fact,
+                        id,
+                        fact
+                    ],
+                )?;
             }
 
             conn.execute(
-                r#"INSERT INTO facts (id, topic, fact, scope, scope_key, source, confidence, created_at, updated_at, expires_at, content_hash)
-                   VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?8,?9,?10)"#,
-                params![id, topic, fact, scope, scope_key, source, confidence, now, expires, content_hash],
+                r#"INSERT INTO facts (id, topic, fact, scope, scope_key, source, confidence, created_at, updated_at, expires_at, content_hash, polarity)
+                   VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?8,?9,?10,?11)"#,
+                params![id, topic, fact, scope, scope_key, source, confidence, now, expires, content_hash, polarity],
             )?;
             Ok(())
         })?;
@@ -586,6 +614,211 @@ impl BrainStore {
         Ok(export_path.display().to_string())
     }
 
+    pub fn get_fact(&self, id: &str) -> Result<Option<serde_json::Value>> {
+        self.with_conn(|conn| {
+            conn.query_row(
+                "SELECT id, topic, fact, scope, scope_key, confidence, polarity, updated_at FROM facts WHERE id = ?1",
+                params![id],
+                |row| {
+                    Ok(serde_json::json!({
+                        "id": row.get::<_, String>(0)?,
+                        "topic": row.get::<_, String>(1)?,
+                        "fact": row.get::<_, String>(2)?,
+                        "scope": row.get::<_, String>(3)?,
+                        "scope_key": row.get::<_, Option<String>>(4)?,
+                        "confidence": row.get::<_, f64>(5)?,
+                        "polarity": row.get::<_, String>(6)?,
+                        "updated_at": row.get::<_, i64>(7)?,
+                    }))
+                },
+            )
+            .optional()
+            .map_err(Into::into)
+        })
+    }
+
+    pub fn insert_retrieval_log(
+        &self,
+        id: &str,
+        query_hash: &str,
+        phase: &str,
+        items_json: &str,
+        tokens_used: usize,
+        truncated: bool,
+        cache_hit: bool,
+        latency_ms: u64,
+    ) -> Result<()> {
+        let now = chrono::Utc::now().timestamp_millis();
+        self.with_conn(|conn| {
+            conn.execute(
+                r#"INSERT INTO retrieval_log (id, timestamp, query_hash, phase, items_returned, tokens_used, truncated, cache_hit, latency_ms)
+                   VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)"#,
+                params![
+                    id,
+                    now,
+                    query_hash,
+                    phase,
+                    items_json,
+                    tokens_used as i64,
+                    truncated as i64,
+                    cache_hit as i64,
+                    latency_ms as i64
+                ],
+            )?;
+            Ok(())
+        })
+    }
+
+    pub fn get_retrieval_log(&self, id: &str) -> Result<Option<RetrievalLogRow>> {
+        self.with_conn(|conn| {
+            conn.query_row(
+                "SELECT id, query_hash, phase, items_returned, tokens_used, truncated, cache_hit, latency_ms FROM retrieval_log WHERE id = ?1",
+                params![id],
+                |row| {
+                    Ok(RetrievalLogRow {
+                        id: row.get(0)?,
+                        query_hash: row.get(1)?,
+                        phase: row.get(2)?,
+                        items_json: row.get(3)?,
+                        tokens_used: row.get::<_, i64>(4)? as usize,
+                        truncated: row.get::<_, i64>(5)? != 0,
+                        cache_hit: row.get::<_, i64>(6)? != 0,
+                        latency_ms: row.get::<_, i64>(7)? as u64,
+                    })
+                },
+            )
+            .optional()
+            .map_err(Into::into)
+        })
+    }
+
+    pub fn latest_retrieval_log(&self) -> Result<Option<RetrievalLogRow>> {
+        self.with_conn(|conn| {
+            conn.query_row(
+                "SELECT id, query_hash, phase, items_returned, tokens_used, truncated, cache_hit, latency_ms FROM retrieval_log ORDER BY timestamp DESC LIMIT 1",
+                [],
+                |row| {
+                    Ok(RetrievalLogRow {
+                        id: row.get(0)?,
+                        query_hash: row.get(1)?,
+                        phase: row.get(2)?,
+                        items_json: row.get(3)?,
+                        tokens_used: row.get::<_, i64>(4)? as usize,
+                        truncated: row.get::<_, i64>(5)? != 0,
+                        cache_hit: row.get::<_, i64>(6)? != 0,
+                        latency_ms: row.get::<_, i64>(7)? as u64,
+                    })
+                },
+            )
+            .optional()
+            .map_err(Into::into)
+        })
+    }
+
+    pub fn list_retrieval_logs(&self, limit: usize) -> Result<Vec<RetrievalLogRow>> {
+        self.with_conn(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT id, query_hash, phase, items_returned, tokens_used, truncated, cache_hit, latency_ms FROM retrieval_log ORDER BY timestamp DESC LIMIT ?1",
+            )?;
+            let rows = stmt
+                .query_map(params![limit as i64], |row| {
+                    Ok(RetrievalLogRow {
+                        id: row.get(0)?,
+                        query_hash: row.get(1)?,
+                        phase: row.get(2)?,
+                        items_json: row.get(3)?,
+                        tokens_used: row.get::<_, i64>(4)? as usize,
+                        truncated: row.get::<_, i64>(5)? != 0,
+                        cache_hit: row.get::<_, i64>(6)? != 0,
+                        latency_ms: row.get::<_, i64>(7)? as u64,
+                    })
+                })?
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(rows)
+        })
+    }
+
+    pub fn list_conflicts(&self, limit: usize) -> Result<Vec<serde_json::Value>> {
+        self.with_conn(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT id, timestamp, topic, scope, scope_key, loser_id, loser_fact, winner_id, winner_fact, resolution FROM conflict_log ORDER BY timestamp DESC LIMIT ?1",
+            )?;
+            let rows = stmt
+                .query_map(params![limit as i64], |row| {
+                    Ok(serde_json::json!({
+                        "id": row.get::<_, String>(0)?,
+                        "timestamp": row.get::<_, i64>(1)?,
+                        "topic": row.get::<_, String>(2)?,
+                        "scope": row.get::<_, String>(3)?,
+                        "scope_key": row.get::<_, Option<String>>(4)?,
+                        "loser_id": row.get::<_, String>(5)?,
+                        "loser_fact": row.get::<_, String>(6)?,
+                        "winner_id": row.get::<_, String>(7)?,
+                        "winner_fact": row.get::<_, String>(8)?,
+                        "resolution": row.get::<_, String>(9)?,
+                    }))
+                })?
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(rows)
+        })
+    }
+
+    pub fn record_context_feedback(&self, item_ids: &[String], useful: bool) -> Result<usize> {
+        let now = chrono::Utc::now().timestamp_millis();
+        let mut updated = 0usize;
+        self.with_conn(|conn| {
+            for item_id in item_ids {
+                let (weight, useful_count, useless_count): (f64, i64, i64) = conn
+                    .query_row(
+                        "SELECT weight, useful_count, useless_count FROM context_weights WHERE item_id = ?1",
+                        params![item_id],
+                        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                    )
+                    .unwrap_or((1.0, 0, 0));
+
+                let (new_weight, new_useful, new_useless) = if useful {
+                    (weight + 0.05, useful_count + 1, useless_count)
+                } else {
+                    (weight - 0.05, useful_count, useless_count + 1)
+                };
+                let new_weight = new_weight.clamp(0.5, 1.5);
+
+                conn.execute(
+                    r#"INSERT INTO context_weights (item_id, weight, useful_count, useless_count, last_used_at)
+                       VALUES (?1,?2,?3,?4,?5)
+                       ON CONFLICT(item_id) DO UPDATE SET
+                         weight=excluded.weight,
+                         useful_count=excluded.useful_count,
+                         useless_count=excluded.useless_count,
+                         last_used_at=excluded.last_used_at"#,
+                    params![item_id, new_weight, new_useful, new_useless, now],
+                )?;
+                updated += 1;
+            }
+            Ok(())
+        })?;
+        Ok(updated)
+    }
+
+    fn load_context_weights(&self, ids: &[String]) -> Result<HashMap<String, f64>> {
+        if ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        self.with_conn(|conn| {
+            let mut map = HashMap::new();
+            for id in ids {
+                if let Ok(weight) = conn.query_row(
+                    "SELECT weight FROM context_weights WHERE item_id = ?1",
+                    params![id],
+                    |r| r.get::<_, f64>(0),
+                ) {
+                    map.insert(id.clone(), weight);
+                }
+            }
+            Ok(map)
+        })
+    }
+
     pub(crate) fn bm25_prefilter(&self, query: &str) -> Result<Bm25Prefilter> {
         let item_bm25 = self.bm25_search_items(query, BM25_ITEMS_TOP).unwrap_or_default();
         let fact_bm25 = self.bm25_search_facts(query, BM25_FACTS_TOP).unwrap_or_default();
@@ -614,6 +847,7 @@ impl BrainStore {
         tags: &[String],
         boost_agents: bool,
         bm25_only: bool,
+        phase: Option<&str>,
     ) -> Result<(Vec<ScoredItem>, usize, usize)> {
         let index_total = snapshot.indexed.len() + snapshot.memories.len();
 
@@ -653,6 +887,9 @@ impl BrainStore {
         }
 
         let candidate_count = candidates.len();
+        let candidate_ids: Vec<String> = candidates.iter().map(|r| r.id.clone()).collect();
+        let context_weights = self.load_context_weights(&candidate_ids)?;
+
         let cosine_sims: Vec<f64> = if bm25_only || query_embedding.is_empty() {
             vec![0.0; candidate_count]
         } else {
@@ -704,6 +941,14 @@ impl BrainStore {
                 score += 0.10;
             }
 
+            if let Some(phase) = phase {
+                score += phase_match_boost(phase, &row.topic, &row.text);
+            }
+
+            if let Some(weight) = context_weights.get(&row.id) {
+                score *= weight;
+            }
+
             scored.push(ScoredItem {
                 id: row.id.clone(),
                 item_type,
@@ -716,6 +961,7 @@ impl BrainStore {
                 },
                 scope: row.scope.clone(),
                 score,
+                polarity: row.polarity.clone(),
             });
         }
 
@@ -730,6 +976,7 @@ impl BrainStore {
         repo_root: Option<&str>,
         tags: &[String],
         boost_agents: bool,
+        phase: Option<&str>,
     ) -> Result<(Vec<ScoredItem>, usize, usize)> {
         let snapshot = self.search_cache_snapshot()?;
         let bm25 = self.bm25_prefilter(query)?;
@@ -741,6 +988,7 @@ impl BrainStore {
             tags,
             boost_agents,
             false,
+            phase,
         )
     }
 }
@@ -822,6 +1070,40 @@ pub struct StoreFactResult {
     pub id: String,
     pub stored: bool,
     pub deduplicated: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct RetrievalLogRow {
+    pub id: String,
+    pub query_hash: String,
+    pub phase: String,
+    pub items_json: String,
+    pub tokens_used: usize,
+    pub truncated: bool,
+    pub cache_hit: bool,
+    pub latency_ms: u64,
+}
+
+fn phase_match_boost(phase: &str, topic: &str, text: &str) -> f64 {
+    if phase == "unknown" {
+        return 0.0;
+    }
+    let hay = format!("{} {}", topic, text).to_lowercase();
+    if hay.contains(phase) {
+        return 0.12;
+    }
+    let keywords = match phase {
+        "debugging" => ["debug", "fix", "error", "bug"],
+        "planning" => ["plan", "design", "architect", "roadmap"],
+        "implementing" => ["implement", "build", "add", "create"],
+        "reviewing" => ["review", "pr", "audit", "lint"],
+        _ => return 0.0,
+    };
+    if keywords.iter().any(|k| hay.contains(k)) {
+        0.12
+    } else {
+        0.0
+    }
 }
 
 fn bytes_to_f32(blob: &[u8]) -> Vec<f32> {

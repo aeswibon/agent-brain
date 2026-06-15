@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-15
+
+### Added
+
+- **Session digests (B):** structured one-fact-per-transcript import; legacy snippet ingest behind `AGENT_BRAIN_SESSION_INGEST_LEGACY=1`.
+- **Context intelligence (C):** optional `phase` on `route_task`, negative memory `polarity` → `must_apply`, phase-aware score boost, `report_context_useful` MCP tool, conflict log on topic supersession.
+- **Operator visibility (D):** `retrieval_log` persistence, `explain_last_context` MCP tool, `agent-brain inspect log|fact|conflicts` CLI.
+- Schema v2 migration: `facts.polarity`, `conflict_log`, `retrieval_log`, `context_weights`.
+
 ## [0.4.0-rc.1] - 2026-06-15
 
 ### Changed
