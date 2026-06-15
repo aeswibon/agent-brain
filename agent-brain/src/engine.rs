@@ -7,7 +7,7 @@ use std::time::Instant;
 use anyhow::Result;
 use uuid::Uuid;
 
-use crate::cache::{fingerprint_open_files, fingerprint_query, CacheKey, QueryEmbeddingCache, TurnCache};
+use crate::cache::{route_cache_key, fingerprint_query, QueryEmbeddingCache, TurnCache};
 use crate::config::Config;
 use crate::db::store::{content_hash, BrainStore};
 use crate::db::{RouteLatencyStats, RouteTiming};
@@ -51,7 +51,7 @@ impl Engine {
 
     pub fn bootstrap(&self, cwd: Option<&Path>) -> Result<usize> {
         let mut n = index::sync_index(&self.store, &self.config, &self.embedder, cwd)?;
-        if self.config.session_ingest_enabled {
+        if self.config.session_ingest_enabled && !self.config.session_ingest_background {
             let sessions = crate::sessions::ingest_legacy_sessions(
                 &self.store,
                 &self.embedder,
@@ -68,6 +68,27 @@ impl Engine {
             }
         }
         Ok(n)
+    }
+
+    pub fn ingest_sessions_background(self: &Arc<Self>) {
+        if !self.config.session_ingest_enabled || !self.config.session_ingest_background {
+            return;
+        }
+        let store = Arc::clone(&self.store);
+        let embedder = Arc::clone(&self.embedder);
+        let config = self.config.clone();
+        std::thread::spawn(move || {
+            match crate::sessions::ingest_legacy_sessions(&store, &embedder, &config) {
+                Ok(sessions) if sessions > 0 => {
+                    tracing::info!("session ingest (background): imported {sessions} legacy snippets");
+                    if let Err(err) = store.bump_index_version() {
+                        tracing::warn!(error = %err, "failed to bump index after session ingest");
+                    }
+                }
+                Ok(_) => {}
+                Err(err) => tracing::warn!(error = %err, "background session ingest failed"),
+            }
+        });
     }
 
     pub fn prewarm(&self) -> Result<()> {
@@ -126,18 +147,24 @@ impl Engine {
         repo_root: Option<&str>,
         tags: &[String],
         boost_agents: bool,
-    ) -> Result<(Vec<ScoredItem>, usize, usize, u64, u64, bool)> {
+    ) -> Result<(Vec<ScoredItem>, usize, usize, u64, u64, bool, bool)> {
         let query_owned = query.to_string();
         let store = Arc::clone(&self.store);
         let bm25_handle = std::thread::spawn(move || store.bm25_prefilter(&query_owned));
 
-        let embed_started = Instant::now();
-        let (query_emb, embed_cache_hit) = self.embed_query(query, Some(message_fp))?;
-        let embed_us = embed_started.elapsed().as_micros() as u64;
-
         let bm25 = bm25_handle
             .join()
             .map_err(|_| anyhow::anyhow!("bm25 prefilter thread panicked"))??;
+
+        let bm25_fast_path = self.config.bm25_fast_path_enabled && bm25.fast_path_eligible();
+
+        let (query_emb, embed_cache_hit, embed_us) = if bm25_fast_path {
+            (Vec::new(), false, 0)
+        } else {
+            let embed_started = Instant::now();
+            let (emb, hit) = self.embed_query(query, Some(message_fp))?;
+            (emb, hit, embed_started.elapsed().as_micros() as u64)
+        };
 
         let score_started = Instant::now();
         let snapshot = self.store.search_cache_snapshot()?;
@@ -148,6 +175,7 @@ impl Engine {
             repo_root,
             tags,
             boost_agents,
+            bm25_fast_path,
         )?;
         let score_us = score_started.elapsed().as_micros() as u64;
 
@@ -158,6 +186,7 @@ impl Engine {
             embed_us,
             score_us,
             embed_cache_hit,
+            bm25_fast_path,
         ))
     }
 
@@ -175,13 +204,14 @@ impl Engine {
         let scope_key = ws.repo_root.clone().unwrap_or_default();
         let cache_warm = self.warmed.load(Ordering::Relaxed);
 
-        let cache_key = CacheKey {
-            scope_key: scope_key.clone(),
-            phase: phase.clone(),
-            open_files_fp: fingerprint_open_files(open_files),
-            query_fp: fingerprint_query(user_message),
-            index_version: self.store.get_index_version(),
-        };
+        let cache_key = route_cache_key(
+            &scope_key,
+            &phase,
+            open_files,
+            user_message,
+            self.store.get_index_version(),
+            self.config.turn_cache_ignore_open_files,
+        );
 
         if let Some(mut cached) = self.cache.get(&cache_key) {
             let total_us = started.elapsed().as_micros() as u64;
@@ -200,7 +230,7 @@ impl Engine {
 
         let query = format!("{} {}", user_message, ws.tags.join(" "));
         let message_fp = fingerprint_query(user_message);
-        let (scored, candidates, index_total, embed_us, score_us, embed_cache_hit) =
+        let (scored, candidates, index_total, embed_us, score_us, embed_cache_hit, bm25_fast_path) =
             self.route_query_parallel(
                 &query,
                 &message_fp,
@@ -226,6 +256,7 @@ impl Engine {
             cache_hit: false,
             embed_cache_hit,
             cache_warm,
+            bm25_fast_path,
             candidates,
             index_total,
         };
@@ -247,7 +278,7 @@ impl Engine {
         let ws = probe(cwd);
         let query = format!("{} {}", task_description, ws.tags.join(" "));
         let message_fp = fingerprint_query(task_description);
-        let (scored, _, _, _, _, _) = self.route_query_parallel(
+        let (scored, _, _, _, _, _, _) = self.route_query_parallel(
             &query,
             &message_fp,
             ws.repo_root.as_deref(),

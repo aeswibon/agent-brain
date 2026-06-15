@@ -15,11 +15,14 @@ const BM25_FACTS_TOP: usize = 40;
 const MIN_CANDIDATES: usize = 50;
 const FALLBACK_RECENT: usize = 80;
 const QUERY_EMBEDDING_CACHE_MAX: usize = 500;
+const BM25_FAST_PATH_MIN_STRENGTH: f64 = 2.5;
 
 pub(crate) struct SearchIndexCache {
     version: u64,
     indexed: Vec<CachedRow>,
     indexed_by_id: HashMap<String, usize>,
+    global_indices: Vec<usize>,
+    scoped_indices: HashMap<String, Vec<usize>>,
     memories: Vec<CachedRow>,
     memories_by_id: HashMap<String, usize>,
 }
@@ -29,6 +32,12 @@ pub(crate) struct Bm25Prefilter {
     memory_ids: HashSet<String>,
     bm25_map: HashMap<String, f64>,
     bm25_max: f64,
+}
+
+impl Bm25Prefilter {
+    pub(crate) fn fast_path_eligible(&self) -> bool {
+        !self.item_ids.is_empty() && self.bm25_max >= BM25_FAST_PATH_MIN_STRENGTH
+    }
 }
 
 #[derive(Clone)]
@@ -96,6 +105,15 @@ impl BrainStore {
             .enumerate()
             .map(|(i, row)| (row.id.clone(), i))
             .collect();
+        let mut global_indices = Vec::new();
+        let mut scoped_indices: HashMap<String, Vec<usize>> = HashMap::new();
+        for (i, row) in indexed.iter().enumerate() {
+            if row.scope == "global" || row.scope_key.is_none() {
+                global_indices.push(i);
+            } else if let Some(key) = &row.scope_key {
+                scoped_indices.entry(key.clone()).or_default().push(i);
+            }
+        }
         let memories_by_id: HashMap<String, usize> = memories
             .iter()
             .enumerate()
@@ -105,6 +123,8 @@ impl BrainStore {
             version,
             indexed,
             indexed_by_id,
+            global_indices,
+            scoped_indices,
             memories,
             memories_by_id,
         });
@@ -556,6 +576,7 @@ impl BrainStore {
         repo_root: Option<&str>,
         tags: &[String],
         boost_agents: bool,
+        bm25_only: bool,
     ) -> Result<(Vec<ScoredItem>, usize, usize)> {
         let index_total = snapshot.indexed.len() + snapshot.memories.len();
 
@@ -573,9 +594,8 @@ impl BrainStore {
         }
 
         if candidates.len() < MIN_CANDIDATES {
-            let mut recent: Vec<&CachedRow> = snapshot.indexed.iter().collect();
-            recent.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
-            for row in recent.into_iter().take(FALLBACK_RECENT) {
+            let mut recent = scoped_fallback_rows(snapshot, repo_root);
+            for row in recent.drain(..) {
                 if candidate_ids.insert(row.id.clone()) {
                     candidates.push(row);
                 }
@@ -599,7 +619,9 @@ impl BrainStore {
         let mut scored = Vec::with_capacity(candidate_count);
         for row in candidates {
             let item_type = ItemType::parse(&row.item_type).unwrap_or(ItemType::Rule);
-            let cosine_sim = if let Some(emb) = &row.embedding {
+            let cosine_sim = if bm25_only {
+                0.0
+            } else if let Some(emb) = &row.embedding {
                 dot_product(query_embedding, emb)
             } else {
                 0.0
@@ -617,7 +639,11 @@ impl BrainStore {
                 })
                 .unwrap_or(0.0);
 
-            let mut score = 0.7 * cosine_sim + 0.2 * bm25_norm;
+            let mut score = if bm25_only {
+                0.9 * bm25_norm
+            } else {
+                0.7 * cosine_sim + 0.2 * bm25_norm
+            };
 
             if let Some(root) = repo_root {
                 if row.scope_key.as_deref() == Some(root) {
@@ -674,7 +700,70 @@ impl BrainStore {
             repo_root,
             tags,
             boost_agents,
+            false,
         )
+    }
+}
+
+fn scoped_fallback_rows<'a>(
+    snapshot: &'a SearchIndexCache,
+    repo_root: Option<&str>,
+) -> Vec<&'a CachedRow> {
+    let mut indices: Vec<usize> = Vec::new();
+    let mut seen = HashSet::new();
+
+    if let Some(root) = repo_root {
+        if let Some(scoped) = snapshot.scoped_indices.get(root) {
+            for &idx in scoped {
+                if seen.insert(idx) {
+                    indices.push(idx);
+                }
+            }
+        }
+    }
+    for &idx in &snapshot.global_indices {
+        if seen.insert(idx) {
+            indices.push(idx);
+        }
+    }
+    if indices.len() < FALLBACK_RECENT {
+        for idx in 0..snapshot.indexed.len() {
+            if seen.insert(idx) {
+                indices.push(idx);
+            }
+            if indices.len() >= FALLBACK_RECENT {
+                break;
+            }
+        }
+    }
+
+    let mut rows: Vec<&CachedRow> = indices.iter().map(|&i| &snapshot.indexed[i]).collect();
+    rows.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+    rows.truncate(FALLBACK_RECENT);
+    rows
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bm25_fast_path_requires_hits_and_strength() {
+        let weak = Bm25Prefilter {
+            item_ids: HashSet::from(["a".into()]),
+            memory_ids: HashSet::new(),
+            bm25_map: HashMap::from([("a".into(), -1.0)]),
+            bm25_max: 1.0,
+        };
+        assert!(!weak.fast_path_eligible());
+
+        let strong = Bm25Prefilter {
+            item_ids: HashSet::from(["a".into()]),
+            memory_ids: HashSet::new(),
+            bm25_map: HashMap::from([("a".into(), -4.0)]),
+            bm25_max: 4.0,
+        };
+        assert!(strong.fast_path_eligible());
     }
 }
 

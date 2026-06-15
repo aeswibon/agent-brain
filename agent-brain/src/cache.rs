@@ -6,7 +6,7 @@ use lru::LruCache;
 
 use crate::types::RouteTaskResponse;
 
-#[derive(Hash, Eq, PartialEq, Clone)]
+#[derive(Hash, Eq, PartialEq, Clone, Debug)]
 pub struct CacheKey {
     pub scope_key: String,
     pub phase: String,
@@ -51,6 +51,27 @@ impl TurnCache {
         if let Ok(mut guard) = self.inner.lock() {
             guard.clear();
         }
+    }
+}
+
+pub fn route_cache_key(
+    scope_key: &str,
+    phase: &str,
+    open_files: &[String],
+    user_message: &str,
+    index_version: u64,
+    ignore_open_files: bool,
+) -> CacheKey {
+    CacheKey {
+        scope_key: scope_key.to_string(),
+        phase: phase.to_string(),
+        open_files_fp: if ignore_open_files {
+            String::new()
+        } else {
+            fingerprint_open_files(open_files)
+        },
+        query_fp: fingerprint_query(user_message),
+        index_version,
     }
 }
 

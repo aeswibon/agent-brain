@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, OnceLock};
 
-use agent_brain::cache::{fingerprint_open_files, fingerprint_query, CacheKey, QueryEmbeddingCache, TurnCache};
+use agent_brain::cache::{fingerprint_open_files, fingerprint_query, route_cache_key, CacheKey, QueryEmbeddingCache, TurnCache};
 use agent_brain::config::Config;
 use agent_brain::db::RouteLatencyStats;
 use agent_brain::db::store::{content_hash, looks_like_secret, BrainStore};
@@ -25,6 +25,9 @@ fn test_config(dir: &TempDir) -> Config {
         session_max_age_days: 90,
         prewarm_on_bootstrap: false,
         embedding_cache_enabled: true,
+        bm25_fast_path_enabled: true,
+        session_ingest_background: false,
+        turn_cache_ignore_open_files: true,
     }
 }
 
@@ -123,6 +126,17 @@ fn supersedes_same_topic_facts() {
     let active: Vec<_> = store.list_facts(10).unwrap();
     assert_eq!(active.len(), 1);
     assert_eq!(active[0]["fact"], "Run clippy and fmt on every PR");
+}
+
+#[test]
+fn turn_cache_ignores_open_files_when_configured() {
+    let key_a = route_cache_key("repo", "implement", &["src/a.rs".into()], "fix bug", 1, true);
+    let key_b = route_cache_key("repo", "implement", &["src/b.rs".into()], "fix bug", 1, true);
+    assert_eq!(key_a.open_files_fp, key_b.open_files_fp);
+    assert_eq!(key_a.query_fp, key_b.query_fp);
+
+    let key_c = route_cache_key("repo", "implement", &["src/a.rs".into()], "fix bug", 1, false);
+    assert_ne!(key_a.open_files_fp, key_c.open_files_fp);
 }
 
 #[test]

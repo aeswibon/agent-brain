@@ -19,11 +19,13 @@ async fn main() -> Result<()> {
             let config = Config::load()?;
             let engine = Arc::new(Engine::new(config)?);
             let n = engine.bootstrap(None)?;
+            engine.ingest_sessions_background();
             tracing::info!("indexed {n} items");
             mcp::run_stdio(engine).await?;
         }
         "index" => {
-            let config = Config::load()?;
+            let mut config = Config::load()?;
+            config.session_ingest_background = false;
             let engine = Engine::new(config)?;
             let n = engine.bootstrap(None)?;
             println!("Indexed {n} items");
@@ -41,6 +43,8 @@ async fn main() -> Result<()> {
                 record.commit.unwrap_or_else(|| "unknown".into())
             );
             if !skip_index {
+                let mut config = config;
+                config.session_ingest_background = false;
                 let engine = Engine::new(config)?;
                 let n = engine.bootstrap(None)?;
                 println!("Indexed {n} items");
@@ -75,6 +79,8 @@ async fn main() -> Result<()> {
                     for pkg in updated {
                         println!("Updated {} ({})", pkg.name, pkg.commit.unwrap_or_default());
                     }
+                    let mut config = config;
+                    config.session_ingest_background = false;
                     let engine = Engine::new(config)?;
                     let n = engine.bootstrap(None)?;
                     println!("Indexed {n} items");

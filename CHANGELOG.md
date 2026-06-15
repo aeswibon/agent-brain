@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.7] - 2026-06-15
+
+### Added
+
+- BM25-only fast path skips query embedding when FTS matches are strong (`AGENT_BRAIN_BM25_FAST_PATH=0` to disable)
+- Background session ingest on `serve` so MCP is live before legacy transcript import (`AGENT_BRAIN_SESSION_INGEST_BG=0` for sync)
+- Scope-aware fallback candidate pools (project + global first, not all packages)
+- Turn cache ignores open files by default for higher hit rate on multi-step loops (`AGENT_BRAIN_TURN_CACHE_OPEN_FILES=1` to include them)
+
+### Changed
+
+- `route_task` logs `bm25_fast_path=true` when ONNX embed is skipped
+
 ## [0.3.6] - 2026-06-15
 
 ### Added

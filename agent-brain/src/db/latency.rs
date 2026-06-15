@@ -10,6 +10,7 @@ pub struct RouteTiming {
     pub cache_hit: bool,
     pub embed_cache_hit: bool,
     pub cache_warm: bool,
+    pub bm25_fast_path: bool,
     pub candidates: usize,
     pub index_total: usize,
 }
@@ -58,6 +59,7 @@ impl RouteTiming {
             cache_hit = self.cache_hit,
             embed_cache_hit = self.embed_cache_hit,
             cache_warm = self.cache_warm,
+            bm25_fast_path = self.bm25_fast_path,
             total_ms = self.total_us / 1000,
             embed_ms = self.embed_us / 1000,
             score_ms = self.score_us / 1000,
