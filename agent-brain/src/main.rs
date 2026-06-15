@@ -123,6 +123,7 @@ async fn main() -> Result<()> {
         }
         "update" => {
             let force = args.iter().any(|a| a == "--force" || a == "-f");
+            let mcp_only = args.iter().any(|a| a == "--mcp-only");
             let config = Config::load()?;
             let brain_settings = settings::AgentBrainSettings::load(&config.home);
             if !brain_settings.auto_update.enabled {
@@ -137,6 +138,7 @@ async fn main() -> Result<()> {
                 &engine,
                 &brain_settings,
                 force,
+                mcp_only,
                 auto_update::AutoUpdateRunOptions::cli(),
             )?;
             if report.packages_updated == 0 && !report.mcp_updated {
@@ -290,7 +292,7 @@ Usage:
   agent-brain package update [name]         Update one or all packages
   agent-brain package remove <name>         Remove an installed package
   agent-brain install [--global]              Write Cursor MCP config for this binary
-  agent-brain update [--force]                Run configured package/MCP auto-update now
+  agent-brain update [--force] [--mcp-only]     Run auto-update (MCP checks GitHub tag; packages use 24h interval unless --force)
   agent-brain config init                     Write ~/.agent_brain/config.yaml defaults
   agent-brain config show                     Print active config file
   agent-brain version                         Print installed version

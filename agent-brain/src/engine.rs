@@ -105,6 +105,7 @@ impl Engine {
                     &engine,
                     &settings,
                     false,
+                    false,
                     crate::auto_update::AutoUpdateRunOptions::background_serve(),
                 ) {
                     Ok(report) if report.mcp_updated || report.packages_updated > 0 => {

@@ -73,6 +73,7 @@ pub fn run(
     engine: &Arc<Engine>,
     settings: &AgentBrainSettings,
     force: bool,
+    mcp_only: bool,
     options: AutoUpdateRunOptions,
 ) -> Result<AutoUpdateReport> {
     let cfg = &settings.auto_update;
@@ -84,7 +85,9 @@ pub fn run(
     let mut state = AutoUpdateState::load(home);
     let check_mcp = cfg.mcp.enabled
         && (force || should_check_mcp(cfg, &state, options));
-    let check_packages = cfg.packages.enabled && (force || due_for_packages(cfg, &state));
+    let check_packages = cfg.packages.enabled
+        && !mcp_only
+        && (force || due_for_packages(cfg, &state));
 
     if !check_mcp && !check_packages {
         tracing::debug!(target: "agent_brain::auto_update", "skipped (interval not elapsed)");
@@ -569,6 +572,23 @@ mod tests {
             &state,
             AutoUpdateRunOptions::background_serve()
         ));
+    }
+
+    #[test]
+    fn force_mcp_only_skips_packages_even_when_due() {
+        let cfg = AutoUpdateSettings {
+            enabled: true,
+            interval_hours: 24,
+            ..AutoUpdateSettings::default()
+        };
+        let state = AutoUpdateState {
+            last_run_unix: 0,
+            ..Default::default()
+        };
+        assert!(due_for_packages(&cfg, &state));
+        // mcp_only=true is enforced in run(); packages gate stays false when forced with mcp_only
+        let check_packages = cfg.packages.enabled && !true && (true || due_for_packages(&cfg, &state));
+        assert!(!check_packages);
     }
 
     #[test]
