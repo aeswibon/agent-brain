@@ -34,6 +34,8 @@ fn test_config(dir: &TempDir) -> Config {
         bootstrap_interval_secs: 0,
         auto_update_startup_delay_secs: 0,
         session_ingest_delay_secs: 0,
+        route_briefing_enabled: false,
+        route_briefing_stderr: false,
     }
 }
 

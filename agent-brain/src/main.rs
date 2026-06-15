@@ -189,6 +189,20 @@ async fn main() -> Result<()> {
         "version" => {
             println!("agent-brain {}", env!("CARGO_PKG_VERSION"));
         }
+        "briefing" => {
+            let config = Config::load()?;
+            let path = config.home.join("logs").join("last-route.md");
+            if path.exists() {
+                print!("{}", std::fs::read_to_string(&path)?);
+            } else {
+                eprintln!("No route briefing yet. Run a turn with route_task first.");
+                eprintln!("Briefings are written to {}", path.display());
+                std::process::exit(1);
+            }
+        }
+        "doctor" => {
+            run_doctor()?;
+        }
         "help" | "--help" | "-h" => {
             print_usage();
         }
@@ -209,6 +223,84 @@ fn flag_value(args: &[String], flag: &str) -> Option<String> {
         .cloned()
 }
 
+fn run_doctor() -> Result<()> {
+    use std::fs;
+    use std::path::PathBuf;
+
+    let version = env!("CARGO_PKG_VERSION");
+    let exe = std::env::current_exe().context("current_exe")?;
+    let config = Config::load()?;
+    let home = dirs::home_dir().context("home dir")?;
+    let mcp_path = home.join(".cursor/mcp.json");
+    let hooks_path = home.join(".cursor/hooks.json");
+    let briefing_path = config.home.join("logs/last-route.md");
+
+    println!("agent-brain doctor\n");
+    println!("  version (this binary): {version}");
+    println!("  binary path:           {}", exe.display());
+
+    let mut ok = true;
+    if mcp_path.exists() {
+        let raw = std::fs::read_to_string(&mcp_path)?;
+        let root: serde_json::Value = serde_json::from_str(&raw)?;
+        if let Some(cmd) = root
+            .pointer("/mcpServers/agent-brain/command")
+            .and_then(|v| v.as_str())
+        {
+            println!("  mcp.json command:      {cmd}");
+            let configured = PathBuf::from(cmd);
+            if configured != exe {
+                if fs::canonicalize(&configured).ok() == fs::canonicalize(&exe).ok() {
+                    println!("  mcp path:              OK (same binary, different path spelling)");
+                } else {
+                    println!("  mcp path:              MISMATCH — run: agent-brain install --global");
+                    ok = false;
+                }
+            } else {
+                println!("  mcp path:              OK");
+            }
+        } else {
+            println!("  mcp.json:              missing agent-brain entry");
+            ok = false;
+        }
+    } else {
+        println!("  mcp.json:              not found — run: agent-brain install --global");
+        ok = false;
+    }
+
+    if hooks_path.exists() {
+        let raw = std::fs::read_to_string(&hooks_path)?;
+        if raw.contains("route_gate.py") {
+            println!("  hooks:                 OK (route_gate installed)");
+        } else {
+            println!("  hooks:                 route_gate not found — run: agent-brain install --global");
+            ok = false;
+        }
+    } else {
+        println!("  hooks:                 not found");
+        ok = false;
+    }
+
+    if briefing_path.is_file() {
+        println!("  last route briefing:   {}", briefing_path.display());
+        println!("                         (run: agent-brain briefing)");
+    } else {
+        println!("  last route briefing:   not yet (appears after first route_task)");
+    }
+
+    println!();
+    println!("Tips:");
+    println!("  • Read routes without expanding MCP JSON: agent-brain briefing");
+    println!("  • Or open: {}", briefing_path.display());
+    println!("  • MCP output panel shows a one-line summary each route (stderr)");
+    println!("  • After binary updates, idle auto-restart reloads serve — toggle MCP only if doctor shows mismatch");
+
+    if !ok {
+        std::process::exit(1);
+    }
+    Ok(())
+}
+
 fn print_usage() {
     eprintln!(
         r#"agent-brain — local MCP router for agents, skills, rules, and memory
@@ -226,6 +318,8 @@ Usage:
   agent-brain config init                     Write ~/.agent_brain/config.yaml defaults
   agent-brain config show                     Print active config file
   agent-brain version                         Print installed version
+  agent-brain briefing                        Print last human-readable route summary
+  agent-brain doctor                          Check MCP install, binary, hooks, briefing
   agent-brain --version                       Same as version (prints version only)
 
 Examples:

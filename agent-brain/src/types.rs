@@ -150,6 +150,8 @@ pub struct RouteTaskResponse {
     pub cache_hit: bool,
     pub latency_ms: u64,
     pub log_id: String,
+    /// One-line human summary (full markdown: `agent-brain briefing` or logs/last-route.md)
+    pub briefing: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

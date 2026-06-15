@@ -19,6 +19,7 @@ use crate::types::{
     RouteTaskResponse, RuleRec, ScoredItem, SkillRec,
 };
 use crate::mcp_activity::McpActivity;
+use crate::route_briefing;
 use crate::workspace::{agent_boost_keywords, infer_phase, probe};
 
 pub struct Engine {
@@ -331,7 +332,7 @@ impl Engine {
                 let p95 = self.route_latency.p95_ms();
                 self.route_latency.record(timing.total_us / 1000);
                 timing.log_line(p95, &phase);
-                return Ok(cached);
+                return Ok(self.finish_route_response(cached));
             }
         }
 
@@ -374,7 +375,19 @@ impl Engine {
         if !is_empty_route_response(&resp) {
             self.cache.put(cache_key, resp.clone());
         }
-        Ok(resp)
+        Ok(self.finish_route_response(resp))
+    }
+
+    fn finish_route_response(&self, mut resp: RouteTaskResponse) -> RouteTaskResponse {
+        if self.config.route_briefing_enabled {
+            route_briefing::publish_briefing(
+                &self.config.home,
+                &resp,
+                self.config.route_briefing_stderr,
+            );
+        }
+        resp.briefing = route_briefing::format_summary_line(&resp);
+        resp
     }
 
     pub fn get_context(

@@ -27,6 +27,10 @@ pub struct Config {
     pub auto_update_startup_delay_secs: u64,
     /// Extra delay before background session ingest (after bootstrap).
     pub session_ingest_delay_secs: u64,
+    /// Write human-readable route summary to ~/.agent_brain/logs/last-route.md
+    pub route_briefing_enabled: bool,
+    /// One-line route summary on stderr (visible in Cursor MCP output)
+    pub route_briefing_stderr: bool,
 }
 
 impl Config {
@@ -72,6 +76,8 @@ impl Config {
             bootstrap_interval_secs: env_u64("AGENT_BRAIN_BOOTSTRAP_INTERVAL_SEC", 3600),
             auto_update_startup_delay_secs: env_u64("AGENT_BRAIN_AUTO_UPDATE_DELAY_SEC", 300),
             session_ingest_delay_secs: env_u64("AGENT_BRAIN_SESSION_INGEST_DELAY_SEC", 180),
+            route_briefing_enabled: env_bool("AGENT_BRAIN_ROUTE_BRIEFING", true),
+            route_briefing_stderr: env_bool("AGENT_BRAIN_ROUTE_BRIEFING_STDERR", true),
             home,
             data_dir,
         })
@@ -162,4 +168,11 @@ fn env_u64(key: &str, default: u64) -> u64 {
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(default)
+}
+
+fn env_bool(key: &str, default: bool) -> bool {
+    match std::env::var(key) {
+        Ok(v) => matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"),
+        Err(_) => default,
+    }
 }

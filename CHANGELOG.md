@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.14] - 2026-06-15
+
+### Added
+
+- Human-readable route briefing: `~/.agent_brain/logs/last-route.md`, one-line `briefing` in `route_task`, stderr summary in MCP output.
+- `agent-brain briefing` and `agent-brain doctor` CLI commands.
+
 ## [0.3.13] - 2026-06-15
 
 ### Added

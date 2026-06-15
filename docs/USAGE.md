@@ -45,6 +45,30 @@ Once `agent-brain` is in your Cursor MCP config (`~/.cursor/mcp.json`), **Cursor
 
 After editing `mcp.json`, **restart Cursor** (or reload MCP in **Settings → MCP**) so it picks up the config.
 
+### When you need to reload MCP (and when you don't)
+
+| Situation | Reload MCP? |
+|-----------|-------------|
+| Normal chat / new session | **No** — Cursor starts `serve` automatically |
+| `route_task` each turn | **No** — that's the hook gate, not a reload |
+| First install or `agent-brain install --global` | **Yes** — once, so Cursor picks up binary + env |
+| You changed `~/.cursor/mcp.json` by hand | **Yes** — toggle off/on or restart Cursor |
+| `agent-brain doctor` shows **mcp path MISMATCH** | **Yes** — run `install --global`, then toggle once |
+| GitHub auto-update downloaded a new binary during `serve` | **Usually no** — idle auto-restart `exec`s the new binary; Cursor reconnects |
+| Auto-restart failed or MCP stays red after update | **Yes** — toggle agent-brain off/on once |
+
+Check anytime: `agent-brain doctor` and `agent-brain version`.
+
+### See what was routed (without expanding MCP JSON)
+
+Each `route_task` updates:
+
+- **File:** `~/.agent_brain/logs/last-route.md` (readable markdown)
+- **Terminal:** `agent-brain briefing`
+- **MCP Output panel:** one-line stderr summary per route
+
+The `briefing` field in `route_task` JSON is a short one-liner; use the file or CLI for full detail.
+
 ## First-time setup (new laptop)
 
 ### 1. Install the binary
