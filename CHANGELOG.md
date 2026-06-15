@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Cursor project rule template (`install --global`) now includes route briefing visibility and macOS codesign guidance so reinstalls do not strip those sections.
+- MCP auto-update checks GitHub on every `serve` start (and every 15 minutes while running), independent of the 24h package `interval_hours`.
+- Default MCP auto-update startup delay reduced from 300s to 60s.
+
+### Added
+
+- `make sync-release` / `scripts/sync-local-release.sh` — download latest release and link MCP immediately (`agent-brain update --force`).
 
 ## [0.3.15] - 2026-06-15
 
