@@ -9,7 +9,7 @@ env:
 
 jobs:
   test:
-    name: Test
+    name: Test and snapshot build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -20,3 +20,20 @@ jobs:
 
       - name: Run tests
         run: cargo test --release -p agent-brain
+
+      - name: Snapshot build
+        run: cargo build --release -p agent-brain
+
+      - name: Stage snapshot binary
+        run: |
+          mkdir -p dist
+          cp target/release/agent-brain "dist/agent-brain-snapshot-linux-x86_64-${{ github.sha }}"
+          chmod +x "dist/agent-brain-snapshot-linux-x86_64-${{ github.sha }}"
+
+      - name: Upload snapshot artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: agent-brain-snapshot-linux-x86_64
+          path: dist/agent-brain-snapshot-linux-x86_64-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 14
