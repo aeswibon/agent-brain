@@ -2,14 +2,51 @@
 
 Fast, local MCP server that routes each turn to the right agents, skills, rules, and memory under a strict token budget.
 
-## Phase 1 (v0.3)
+**Setup guide:** [../docs/USAGE.md](../docs/USAGE.md)
 
-- Indexes agents, skills, rules, and memory from local paths
-- MCP tools: `route_task`, `get_context`, `store_memory`, `list_memory`, `delete_memory`, `export_memory`
-- Turn cache (LRU, 60s TTL) for sub-50ms repeat queries
-- Write queue with SQLite WAL for durable memory writes
+## MCP auto-start (important)
 
-## Install
+You do **not** run `agent-brain serve` in a terminal for normal Cursor use.
+
+1. Run `agent-brain install --global` once
+2. Restart Cursor
+3. Cursor automatically spawns `agent-brain serve` when MCP is needed
+
+Use `agent-brain serve` only for debugging MCP outside Cursor.
+
+## Quick setup
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/aeswibon/agent-brain/main/scripts/install.sh | bash -s -- --global
+# restart Cursor → Settings → MCP → enable agent-brain
+agent-brain add affaan-m/ecc   # optional
+```
+
+## Install packages (ECC, etc.)
+
+Add a GitHub repo of skills/agents/rules in one command:
+
+```bash
+agent-brain add affaan-m/ecc
+# or
+agent-brain add https://github.com/affaan-m/ecc
+```
+
+This shallow-clones into `~/.agent_brain/packages/ecc/` and indexes:
+
+- `skills/`, `agents/`, `rules/`, `commands/`
+- `.cursor/rules`, `.claude/skills`, and other standard paths
+- Optional `agent-brain.yaml` manifest for custom roots
+
+Manage packages:
+
+```bash
+agent-brain package list
+agent-brain package update ecc
+agent-brain package remove ecc
+```
+
+## Install MCP server
 
 ### One-liner (recommended)
 
@@ -51,14 +88,21 @@ First run downloads the `AllMiniLML6V2` embedding model via fastembed (~90MB).
 ## Run
 
 ```bash
-# Start MCP server (stdio)
+# Debug MCP manually (not needed for Cursor)
 cargo run --release -p agent-brain -- serve
 
-# One-shot reindex
+# Reindex on demand
 cargo run --release -p agent-brain -- index
 ```
 
 Logs go to **stderr** only — stdout is reserved for MCP JSON-RPC.
+
+## Phase 1 features
+
+- Indexes agents, skills, rules, and memory from local paths and packages
+- MCP tools: `route_task`, `get_context`, `store_memory`, `list_memory`, `delete_memory`, `export_memory`
+- Turn cache (LRU, 60s TTL) for sub-50ms repeat queries
+- Write queue with SQLite WAL for durable memory writes
 
 ## Cursor MCP config
 

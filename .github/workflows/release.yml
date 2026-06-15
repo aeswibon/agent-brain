@@ -6,13 +6,14 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 permissions:
   contents: write
 
 jobs:
-  release:
-    name: Release (${{ matrix.target }})
+  build:
+    name: Build (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -34,6 +35,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -54,8 +59,44 @@ jobs:
             chmod +x "dist/${{ matrix.artifact }}"
           fi
 
-      - name: Upload release asset
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/${{ matrix.artifact }}
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Extract changelog release notes
+        shell: bash
+        run: |
+          chmod +x .github/scripts/changelog-extract.sh
+          .github/scripts/changelog-extract.sh "${{ github.ref_name }}" > release-notes.md
+          echo "--- Release notes ---"
+          cat release-notes.md
+
+      - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/${{ matrix.artifact }}
-          generate_release_notes: true
+          tag_name: ${{ github.ref_name }}
+          name: agent-brain ${{ github.ref_name }}
+          body_path: release-notes.md
+          files: dist/*
+          draft: false
+          prerelease: false

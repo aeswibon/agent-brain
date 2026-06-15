@@ -41,6 +41,7 @@ impl Config {
         std::fs::create_dir_all(&self.data_dir).context("create data dir")?;
         std::fs::create_dir_all(self.home.join("logs")).ok();
         std::fs::create_dir_all(self.home.join("export")).ok();
+        std::fs::create_dir_all(self.home.join("packages")).ok();
         Ok(())
     }
 
@@ -50,6 +51,7 @@ impl Config {
         roots.push(self.home.join("rules"));
         roots.push(self.home.join("skills"));
         roots.push(self.home.join("agents"));
+        roots.extend(crate::packages::package_index_roots(&self.home));
 
         if let Some(home) = dirs::home_dir() {
             roots.push(home.join(".cursor/skills-cursor"));

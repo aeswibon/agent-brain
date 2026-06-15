@@ -20,7 +20,7 @@ pub fn sync_index(
 
     for root in roots {
         if root.is_file() {
-            if let Some(item) = parse_file(&root, None) {
+            if let Some(item) = parse_file(&root, None, package_context(&root, &config.home)) {
                 index_item(store, embedder, &item)?;
                 count += 1;
             }
@@ -29,6 +29,7 @@ pub fn sync_index(
         if !root.exists() {
             continue;
         }
+        let pkg_ctx = package_context(&root, &config.home);
         for entry in WalkDir::new(&root)
             .into_iter()
             .filter_map(|e| e.ok())
@@ -39,7 +40,7 @@ pub fn sync_index(
                 continue;
             }
             let repo = cwd.and_then(|c| crate::config::find_repo_root(c));
-            if let Some(item) = parse_file(path, repo.as_deref()) {
+            if let Some(item) = parse_file(path, repo.as_deref(), pkg_ctx.clone()) {
                 index_item(store, embedder, &item)?;
                 count += 1;
             }
@@ -67,7 +68,15 @@ struct ParsedItem {
     scope_key: Option<String>,
 }
 
-fn parse_file(path: &Path, repo: Option<&Path>) -> Option<ParsedItem> {
+fn package_context(path: &Path, home: &Path) -> Option<String> {
+    let packages = home.join("packages");
+    path.strip_prefix(&packages)
+        .ok()
+        .and_then(|rel| rel.components().next())
+        .map(|c| c.as_os_str().to_string_lossy().to_string())
+}
+
+fn parse_file(path: &Path, repo: Option<&Path>, package: Option<String>) -> Option<ParsedItem> {
     let content = fs::read_to_string(path).ok()?;
     let source_path = path.display().to_string();
     let file_name = path.file_name()?.to_string_lossy().to_string();
@@ -82,6 +91,18 @@ fn parse_file(path: &Path, repo: Option<&Path>) -> Option<ParsedItem> {
             ItemType::Skill,
             name.clone(),
             extract_skill_text(&content, &name),
+        )
+    } else if path.parent().map(|p| p.ends_with("commands")).unwrap_or(false)
+        || path.components().any(|c| c.as_os_str() == "commands")
+    {
+        let name = path
+            .file_stem()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or(file_name.clone());
+        (
+            ItemType::Skill,
+            format!("command:{name}"),
+            extract_agent_text(&content, &name),
         )
     } else if path.parent().map(|p| p.ends_with("agents")).unwrap_or(false)
         || path.components().any(|c| c.as_os_str() == "agents")
@@ -115,7 +136,9 @@ fn parse_file(path: &Path, repo: Option<&Path>) -> Option<ParsedItem> {
         return None;
     };
 
-    let (scope, scope_key) = if let Some(repo) = repo {
+    let (scope, scope_key) = if let Some(package) = package {
+        ("package".into(), Some(package))
+    } else if let Some(repo) = repo {
         ("project".into(), Some(repo.display().to_string()))
     } else {
         ("global".into(), None)

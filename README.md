@@ -4,32 +4,58 @@ Fast, local MCP server that routes each turn to the right **agents, skills, rule
 
 Rust is the brain; Cursor/Claude are the hands.
 
-## Quick install (another laptop)
+**Full guide:** [docs/USAGE.md](docs/USAGE.md)
 
-**Option A — one-liner** (downloads latest release binary, configures Cursor):
+## Do I start the MCP manually?
+
+**No.** After `agent-brain install --global`, **Cursor starts `agent-brain serve` automatically** when you open the editor. You only run `serve` yourself when debugging.
+
+## Quick start (new laptop)
 
 ```bash
+# 1. Install binary + write ~/.cursor/mcp.json
 curl -fsSL https://raw.githubusercontent.com/aeswibon/agent-brain/main/scripts/install.sh | bash -s -- --global
+
+# 2. Restart Cursor, enable agent-brain under Settings → MCP
+
+# 3. (Optional) Install ECC or other skill packages
+agent-brain add affaan-m/ecc
 ```
 
-**Option B — build from source** (requires Rust):
+That's it. Use Agent mode in chat — the model can call `route_task` each turn.
+
+## Install options
+
+**Release binary** (from [Releases](https://github.com/aeswibon/agent-brain/releases)):
+
+```bash
+# download the binary for your OS, then:
+chmod +x agent-brain-*
+mv agent-brain-* ~/.local/bin/agent-brain
+agent-brain install --global
+```
+
+**From source** (requires Rust + git):
 
 ```bash
 cargo install --git https://github.com/aeswibon/agent-brain --locked agent-brain
 agent-brain install --global
-agent-brain index
+agent-brain add affaan-m/ecc   # optional packages
 ```
 
-**Option C — manual MCP config** after building locally:
+## Commands
 
-```bash
-cargo build --release -p agent-brain
-./target/release/agent-brain install --global
-```
+| Command | Description |
+|---------|-------------|
+| `agent-brain install --global` | Write `~/.cursor/mcp.json` (one-time) |
+| `agent-brain add <owner/repo>` | Install a GitHub skills/agents package |
+| `agent-brain package list\|update\|remove` | Manage installed packages |
+| `agent-brain index` | Force reindex (optional — also runs on MCP start) |
+| `agent-brain serve` | Manual MCP server (debug only) |
 
-Restart Cursor and enable the `agent-brain` server under **Settings → MCP**.
+## MCP config
 
-## MCP config shape
+`agent-brain install --global` writes:
 
 ```json
 {
@@ -37,30 +63,26 @@ Restart Cursor and enable the `agent-brain` server under **Settings → MCP**.
     "agent-brain": {
       "command": "/Users/you/.local/bin/agent-brain",
       "args": ["serve"],
-      "env": {
-        "RUST_LOG": "agent_brain=info"
-      }
+      "env": { "RUST_LOG": "agent_brain=info" }
     }
   }
 }
 ```
 
-`agent-brain install` writes this using the absolute path of the current binary.
+Cursor spawns this process automatically — you do not need a terminal running `serve`.
 
-## Commands
+## Packages
 
-| Command | Description |
-|---------|-------------|
-| `agent-brain serve` | Start MCP server (stdio) |
-| `agent-brain index` | Reindex local agents/skills/rules/memory |
-| `agent-brain install` | Write `.cursor/mcp.json` in current directory |
-| `agent-brain install --global` | Write `~/.cursor/mcp.json` |
+```bash
+agent-brain add affaan-m/ecc
+agent-brain package update ecc
+```
+
+Clones to `~/.agent_brain/packages/` and indexes skills, agents, rules, and commands.
 
 ## Data directory
 
-Default: `~/.agent_brain/` — override with `AGENT_BRAIN_HOME`.
-
-First run downloads the `AllMiniLML6V2` embedding model (~90MB).
+`~/.agent_brain/` (override with `AGENT_BRAIN_HOME`). First MCP start downloads the embedding model (~90MB).
 
 ## Development
 
@@ -69,20 +91,9 @@ cargo test --release -p agent-brain
 cargo build --release -p agent-brain
 ```
 
-See [agent-brain/README.md](agent-brain/README.md) for tool details.
+## Releases
 
-## CI & releases
-
-- Every push: tests + build artifacts (30-day retention)
-- Tags `v*`: GitHub Release with macOS/Linux/Windows binaries
-
-Download a CI artifact or release asset, then:
-
-```bash
-chmod +x agent-brain-*
-mv agent-brain-* ~/.local/bin/agent-brain
-agent-brain install --global
-```
+See [CHANGELOG.md](CHANGELOG.md). Tags `v*` publish platform binaries with changelog-based release notes.
 
 ## License
 
