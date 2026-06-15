@@ -244,6 +244,18 @@ fn update_mcp_binary(cfg: &AutoUpdateSettings, current_version: &str) -> Result<
     }
     fs::rename(&tmp, &bin_path).with_context(|| format!("install {}", bin_path.display()))?;
 
+    #[cfg(target_os = "macos")]
+    {
+        if let Err(err) = crate::doctor::adhoc_sign(&bin_path) {
+            tracing::warn!(
+                target: "agent_brain::auto_update",
+                path = %bin_path.display(),
+                error = %err,
+                "adhoc codesign after binary update failed"
+            );
+        }
+    }
+
     tracing::info!(
         target: "agent_brain::auto_update",
         from = current_version,

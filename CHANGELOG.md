@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `agent-brain doctor --fix`: adhoc re-sign macOS binaries, realign `mcp.json`, refresh hooks.
+- macOS adhoc codesign after MCP binary auto-update and `install --global`.
+
+### Fixed
+
+- macOS taskgated SIGKILL (`Code Signature Invalid`) on linker-signed Rust binaries used by Cursor MCP.
+
 ## [0.3.14] - 2026-06-15
 
 ### Added

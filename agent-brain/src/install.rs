@@ -44,6 +44,16 @@ pub fn configure_cursor(global: bool, exe: &Path, quiet: bool) -> Result<()> {
         install_cursor_hooks(quiet)?;
     }
     install_project_cursor_rules(quiet)?;
+
+    #[cfg(target_os = "macos")]
+    {
+        if let Err(err) = crate::doctor::adhoc_sign(exe) {
+            if !quiet {
+                eprintln!("Warning: adhoc codesign failed: {err}");
+            }
+        }
+    }
+
     Ok(())
 }
 

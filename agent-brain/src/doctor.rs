@@ -1,0 +1,266 @@
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+use anyhow::{bail, Context, Result};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SignatureStatus {
+    Ok,
+    Missing,
+    Invalid,
+    #[cfg(target_os = "macos")]
+    LinkerSigned,
+}
+
+pub fn run(fix: bool) -> Result<()> {
+    let version = env!("CARGO_PKG_VERSION");
+    let exe = std::env::current_exe().context("current_exe")?;
+    let config = crate::config::Config::load()?;
+    let home = dirs::home_dir().context("home dir")?;
+    let mcp_path = home.join(".cursor/mcp.json");
+    let hooks_path = home.join(".cursor/hooks.json");
+    let briefing_path = config.home.join("logs/last-route.md");
+
+    let mcp_binary = mcp_binary_path(&mcp_path)?;
+
+    println!("agent-brain doctor\n");
+    println!("  version (this binary): {version}");
+    println!("  binary path:           {}", exe.display());
+
+    let mut ok = true;
+
+    if let Some(cmd) = &mcp_binary {
+        println!("  mcp.json command:      {}", cmd.display());
+        if paths_same(&exe, cmd) {
+            println!("  mcp path:              OK");
+        } else if fs::canonicalize(cmd).ok() == fs::canonicalize(&exe).ok() {
+            println!("  mcp path:              OK (same binary, different path spelling)");
+        } else {
+            println!("  mcp path:              MISMATCH");
+            ok = false;
+            if fix {
+                println!("  fixing:                agent-brain install --global");
+                crate::install::configure_cursor(true, &exe, false)?;
+                println!("  mcp path:              realigned to {}", exe.display());
+                ok = true;
+            } else {
+                println!("                         run: agent-brain doctor --fix");
+            }
+        }
+    } else if mcp_path.exists() {
+        println!("  mcp.json:              missing agent-brain entry");
+        ok = false;
+    } else {
+        println!("  mcp.json:              not found — run: agent-brain install --global");
+        ok = false;
+    }
+
+    if hooks_path.exists() {
+        let raw = fs::read_to_string(&hooks_path)?;
+        if raw.contains("route_gate.py") {
+            println!("  hooks:                 OK (route_gate installed)");
+        } else {
+            println!("  hooks:                 route_gate not found");
+            ok = false;
+            if fix {
+                crate::install::configure_cursor(true, &exe, false)?;
+                println!("  hooks:                 reinstalled");
+                ok = true;
+            }
+        }
+    } else {
+        println!("  hooks:                 not found");
+        ok = false;
+    }
+
+    let mut sign_targets = vec![exe.clone()];
+    if let Some(cmd) = mcp_binary {
+        if !paths_same(&exe, &cmd) {
+            sign_targets.push(cmd);
+        }
+    }
+
+    for path in unique_existing_paths(sign_targets) {
+        let status = assess_signature(&path);
+        let gate = gatekeeper_allows(&path);
+        let gate_note = if gate {
+            " · Gatekeeper OK"
+        } else if status == SignatureStatus::Ok {
+            " · Gatekeeper rejected (expected for adhoc local builds)"
+        } else {
+            " · Gatekeeper REJECTED"
+        };
+        println!(
+            "  codesign {}:        {:?}{}",
+            path.display(),
+            status,
+            gate_note
+        );
+        if status != SignatureStatus::Ok {
+            ok = false;
+            if fix {
+                adhoc_sign(&path).with_context(|| format!("sign {}", path.display()))?;
+                let after = assess_signature(&path);
+                let gate_after = gatekeeper_allows(&path);
+                let after_gate_note = if gate_after {
+                    " · Gatekeeper OK"
+                } else if after == SignatureStatus::Ok {
+                    " · Gatekeeper rejected (expected for adhoc local builds)"
+                } else {
+                    " · Gatekeeper still rejected"
+                };
+                println!(
+                    "  signed {}:           {:?}{}",
+                    path.display(),
+                    after,
+                    after_gate_note
+                );
+                if after == SignatureStatus::Ok {
+                    ok = true;
+                }
+            }
+        }
+    }
+
+    if briefing_path.is_file() {
+        println!("  last route briefing:   {}", briefing_path.display());
+    } else {
+        println!("  last route briefing:   not yet (appears after first route_task)");
+    }
+
+    println!();
+    println!("Tips:");
+    println!("  • agent-brain briefing — readable route without expanding MCP JSON");
+    println!("  • macOS: linker-signed binaries are killed by taskgated — doctor --fix adhoc re-signs");
+    println!("  • spctl may reject adhoc local builds; that is OK if codesign shows adhoc, not linker-signed");
+
+    if !ok {
+        if fix {
+            bail!("doctor --fix completed with remaining issues");
+        }
+        std::process::exit(1);
+    }
+    Ok(())
+}
+
+fn mcp_binary_path(mcp_path: &Path) -> Result<Option<PathBuf>> {
+    if !mcp_path.is_file() {
+        return Ok(None);
+    }
+    let raw = fs::read_to_string(mcp_path)?;
+    let root: serde_json::Value = serde_json::from_str(&raw)?;
+    Ok(root
+        .pointer("/mcpServers/agent-brain/command")
+        .and_then(|v| v.as_str())
+        .map(PathBuf::from))
+}
+
+fn paths_same(a: &Path, b: &Path) -> bool {
+    a == b || fs::canonicalize(a).ok() == fs::canonicalize(b).ok()
+}
+
+fn unique_existing_paths(entries: Vec<PathBuf>) -> Vec<PathBuf> {
+    let mut out: Vec<PathBuf> = Vec::new();
+    for candidate in entries {
+        if !candidate.is_file() {
+            continue;
+        }
+        let dup = out.iter().any(|existing| {
+            paths_same(existing.as_path(), candidate.as_path())
+        });
+        if !dup {
+            out.push(candidate);
+        }
+    }
+    out
+}
+
+pub fn assess_signature(path: &Path) -> SignatureStatus {
+    #[cfg(target_os = "macos")]
+    {
+        let output = Command::new("codesign")
+            .args(["-dv", "--verbose=2", &path.display().to_string()])
+            .output();
+        let Ok(output) = output else {
+            return SignatureStatus::Missing;
+        };
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if !output.status.success() {
+            return SignatureStatus::Invalid;
+        }
+        if stderr.contains("linker-signed") {
+            return SignatureStatus::LinkerSigned;
+        }
+        if stderr.contains("Signature=adhoc") || stderr.contains("Signature=Apple") {
+            return SignatureStatus::Ok;
+        }
+        if stderr.contains("code object is not signed") {
+            return SignatureStatus::Invalid;
+        }
+        SignatureStatus::Ok
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = path;
+        SignatureStatus::Ok
+    }
+}
+
+pub fn gatekeeper_allows(path: &Path) -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("spctl")
+            .args([
+                "-a",
+                "-vv",
+                "-t",
+                "execute",
+                &path.display().to_string(),
+            ])
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = path;
+        true
+    }
+}
+
+/// Ad-hoc sign + clear quarantine xattrs (required after copy on macOS).
+pub fn adhoc_sign(path: &Path) -> Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = Command::new("xattr")
+            .args(["-cr", &path.display().to_string()])
+            .status()
+            .context("xattr -cr")?;
+        let status = Command::new("codesign")
+            .args([
+                "--force",
+                "--sign",
+                "-",
+                &path.display().to_string(),
+            ])
+            .status()
+            .context("codesign")?;
+        if !status.success() {
+            bail!("codesign failed for {}", path.display());
+        }
+        let verify = Command::new("codesign")
+            .args(["--verify", "--verbose", &path.display().to_string()])
+            .status()
+            .context("codesign --verify")?;
+        if !verify.success() {
+            bail!("codesign verify failed for {}", path.display());
+        }
+        Ok(())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = path;
+        Ok(())
+    }
+}
