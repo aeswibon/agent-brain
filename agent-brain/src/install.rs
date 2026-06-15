@@ -203,6 +203,14 @@ When a durable decision or convention is established, call **`store_memory`** on
 
 If agent-brain MCP tools are unavailable, set `AGENT_BRAIN_ROUTE_HOOKS=0` and proceed with reduced context.
 
+## User visibility (no need to expand MCP JSON)
+
+Each `route_task` writes a readable summary to **`~/.agent_brain/logs/last-route.md`**. The user can run **`agent-brain briefing`** in a terminal or watch the MCP output panel for a one-line stderr summary. The JSON field **`briefing`** is a short one-liner; full detail is in the file.
+
+## macOS
+
+Linker-signed local builds are killed by taskgated when Cursor launches MCP. Use **`make release-macos`**, **`agent-brain doctor --fix`**, or the GitHub release binary at `~/.local/bin/agent-brain`.
+
 **Hooks enforce this:** Cursor blocks other tools until `route_task` succeeds each turn.
 "#;
 
