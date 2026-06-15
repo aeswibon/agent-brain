@@ -110,6 +110,17 @@ impl BrainStore {
         Ok(())
     }
 
+    pub fn delete_indexed_items_under_prefix(&self, path_prefix: &str) -> Result<u64> {
+        let prefix = path_prefix.trim_end_matches('/');
+        self.with_conn(|conn| {
+            let n = conn.execute(
+                "DELETE FROM indexed_items WHERE source_path = ?1 OR source_path LIKE ?2",
+                params![prefix, format!("{prefix}/%")],
+            )?;
+            Ok(n as u64)
+        })
+    }
+
     pub fn load_searchable_items(&self) -> Result<Vec<SearchRow>> {
         self.with_conn(|conn| {
             let mut stmt = conn.prepare(

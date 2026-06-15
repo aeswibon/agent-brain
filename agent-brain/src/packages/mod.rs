@@ -161,18 +161,29 @@ pub fn add_package(config: &Config, source_input: &str, git_ref: Option<&str>) -
     Ok(record)
 }
 
-pub fn remove_package(config: &Config, name: &str) -> Result<()> {
+pub fn remove_package(config: &Config, name: &str) -> Result<u64> {
     let mut registry = PackageRegistry::load(&config.home)?;
     let record = registry
         .remove(name)
         .with_context(|| format!("package '{name}' is not installed"))?;
     registry.save(&config.home)?;
 
+    let purged = purge_package_index(config, &record.install_path)?;
+
     let path = PathBuf::from(&record.install_path);
     if path.exists() {
         fs::remove_dir_all(&path).with_context(|| format!("remove {}", path.display()))?;
     }
-    Ok(())
+    Ok(purged)
+}
+
+fn purge_package_index(config: &Config, install_path: &str) -> Result<u64> {
+    let store = crate::db::store::BrainStore::open(&config.db_path)?;
+    let n = store.delete_indexed_items_under_prefix(install_path)?;
+    if n > 0 {
+        store.bump_index_version()?;
+    }
+    Ok(n)
 }
 
 pub fn update_packages(config: &Config, name: Option<&str>) -> Result<Vec<PackageRecord>> {

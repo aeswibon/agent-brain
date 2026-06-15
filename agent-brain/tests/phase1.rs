@@ -244,3 +244,120 @@ fn token_estimate_is_reasonable() {
     assert!(estimate_tokens(text) >= 2);
     assert!(estimate_tokens(text) < 20);
 }
+
+#[test]
+fn dedupes_duplicate_skill_names_in_route_task() {
+    let dir = TempDir::new().unwrap();
+    let config = test_config(&dir);
+    config.ensure_dirs().unwrap();
+    let store = BrainStore::open(&config.db_path).unwrap();
+    let embedder = shared_embedder();
+
+    let query = "configure vitest for react testing";
+    let strong = format!("{query} vitest react testing patterns");
+    let weak = "unrelated cooking recipes and gardening tips";
+
+    for (path, text) in [
+        ("/packages/ecc/skills/react-patterns/SKILL.md", strong.as_str()),
+        (
+            "/packages/other/skills/react-patterns/SKILL.md",
+            weak,
+        ),
+    ] {
+        let emb = embedder.embed_one(text).unwrap();
+        store
+            .upsert_indexed_item(
+                ItemType::Skill,
+                "react-patterns",
+                text,
+                path,
+                "package",
+                Some("pkg"),
+                &content_hash(text),
+                Some(&emb),
+            )
+            .unwrap();
+    }
+
+    let engine = Engine {
+        config,
+        store: Arc::new(store),
+        embedder: embedder.clone(),
+        cache: Arc::new(TurnCache::new(8, 60)),
+        auto_capture_enabled: true,
+    };
+
+    let resp = engine
+        .route_task(
+            query,
+            None,
+            &[],
+            500,
+            RouteLimits {
+                agents: 0,
+                skills: 3,
+                rules: 0,
+                memory: 0,
+            },
+        )
+        .unwrap();
+
+    let skill_names: Vec<_> = resp
+        .recommended_skills
+        .iter()
+        .map(|s| s.name.as_str())
+        .collect();
+    assert_eq!(
+        skill_names.iter().filter(|n| **n == "react-patterns").count(),
+        1
+    );
+    assert!(
+        resp.recommended_skills[0]
+            .path
+            .contains("/packages/ecc/skills/react-patterns/")
+    );
+}
+
+#[test]
+fn purges_indexed_items_under_package_prefix() {
+    let dir = TempDir::new().unwrap();
+    let config = test_config(&dir);
+    config.ensure_dirs().unwrap();
+    let store = BrainStore::open(&config.db_path).unwrap();
+    let emb = dummy_embedding();
+
+    let prefix = dir.path().join("packages/ecc");
+    store
+        .upsert_indexed_item(
+            ItemType::Skill,
+            "foo",
+            "skill text",
+            &prefix.join("skills/foo/SKILL.md").display().to_string(),
+            "package",
+            Some("ecc"),
+            &content_hash("skill text"),
+            Some(&emb),
+        )
+        .unwrap();
+    store
+        .upsert_indexed_item(
+            ItemType::Skill,
+            "bar",
+            "other skill",
+            "/global/skills/bar/SKILL.md",
+            "global",
+            None,
+            &content_hash("other skill"),
+            Some(&emb),
+        )
+        .unwrap();
+
+    let purged = store
+        .delete_indexed_items_under_prefix(&prefix.display().to_string())
+        .unwrap();
+    assert_eq!(purged, 1);
+
+    let remaining = store.load_searchable_items().unwrap();
+    assert_eq!(remaining.len(), 1);
+    assert_eq!(remaining[0].topic, "bar");
+}

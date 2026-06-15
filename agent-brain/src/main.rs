@@ -66,8 +66,8 @@ async fn main() -> Result<()> {
                     let name = args
                         .get(3)
                         .context("usage: agent-brain package remove <name>")?;
-                    packages::remove_package(&config, name)?;
-                    println!("Removed package '{name}'");
+                    let purged = packages::remove_package(&config, name)?;
+                    println!("Removed package '{name}' (purged {purged} indexed items)");
                 }
                 "update" => {
                     let name = args.get(3).map(String::as_str);

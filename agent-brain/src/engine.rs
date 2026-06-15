@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
@@ -122,9 +123,13 @@ impl Engine {
         let mut items = Vec::new();
         let mut tokens_used = 0;
         let mut truncated = false;
+        let mut seen_topics = HashSet::new();
 
         for item in scored {
             if !include_types.contains(&item.item_type) {
+                continue;
+            }
+            if is_duplicate_topic(&mut seen_topics, &item) {
                 continue;
             }
             let entry = GetContextItem {
@@ -165,10 +170,15 @@ fn build_route_response(
     let mut memory = Vec::new();
     let mut must_apply = Vec::new();
     let mut tokens_used = 0;
+    let mut seen_agents = HashSet::new();
+    let mut seen_skills = HashSet::new();
 
     for item in scored {
         let (bucket, rec_tokens) = match item.item_type {
             ItemType::Agent if agents.len() < limits.agents => {
+                if !seen_agents.insert(item.topic.to_ascii_lowercase()) {
+                    continue;
+                }
                 let rec = AgentRec {
                     name: item.topic.clone(),
                     path: item.source_path.clone().unwrap_or_default(),
@@ -180,6 +190,9 @@ fn build_route_response(
                 ("agent", t)
             }
             ItemType::Skill if skills.len() < limits.skills => {
+                if !seen_skills.insert(item.topic.to_ascii_lowercase()) {
+                    continue;
+                }
                 let rec = SkillRec {
                     name: item.topic.clone(),
                     path: item.source_path.clone().unwrap_or_default(),
@@ -247,4 +260,11 @@ fn rationale_for(item: &ScoredItem, phase: &str) -> String {
         "Matched {} for {} phase (score {:.2}).",
         item.topic, phase, item.score
     )
+}
+
+fn is_duplicate_topic(seen: &mut HashSet<String>, item: &ScoredItem) -> bool {
+    match item.item_type {
+        ItemType::Agent | ItemType::Skill => !seen.insert(item.topic.to_ascii_lowercase()),
+        _ => false,
+    }
 }

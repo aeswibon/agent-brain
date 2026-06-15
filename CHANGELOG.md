@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-06-15
+
+### Added
+
+- Dedupe agents/skills by name in `route_task` and `get_context` (highest score wins when packages overlap)
+- Purge indexed items from `brain.db` when a package is removed
+
 ## [0.3.2] - 2026-06-15
 
 ### Added
