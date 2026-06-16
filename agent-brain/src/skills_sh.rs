@@ -14,7 +14,10 @@ use serde::{Deserialize, Serialize};
 use crate::db::store::{content_hash, BrainStore};
 use crate::embed::deterministic_embedding;
 use crate::eval::seed_filler_skills;
-use crate::fixture::new_isolated_engine;
+use crate::fixture::{
+    export_fixture_db, new_isolated_engine, open_fixture_engine, stamp_fixture_meta,
+    FixtureBuildReport, FIXTURE_DB_KIND_SKILLS_SH,
+};
 use crate::index::skill_index_text;
 use crate::types::{ItemType, RouteLimits};
 
@@ -103,6 +106,10 @@ pub struct SkillsShGoldenCase {
 pub struct SkillsShEvalReport {
     pub snapshot_skills: usize,
     pub simulated_index_size: usize,
+    #[serde(default)]
+    pub fixture_db: Option<String>,
+    #[serde(default)]
+    pub index_mode: String,
     pub cases: usize,
     pub passed: usize,
     pub recall_at_3: f64,
@@ -363,9 +370,13 @@ pub fn index_snapshot(store: &Arc<BrainStore>, snapshot: &SkillsShSnapshot) -> R
     Ok(count)
 }
 
-pub fn seed_simulated_production_index(store: &Arc<BrainStore>, snapshot: &SkillsShSnapshot) -> Result<usize> {
+pub fn seed_simulated_production_index(
+    store: &Arc<BrainStore>,
+    snapshot: &SkillsShSnapshot,
+    index_size: usize,
+) -> Result<usize> {
     let indexed = index_snapshot(store, snapshot)?;
-    let filler = SKILLS_SH_SIMULATED_INDEX.saturating_sub(indexed);
+    let filler = index_size.saturating_sub(indexed);
     if filler > 0 {
         seed_filler_skills(store, filler)?;
         store.bump_index_version()?;
@@ -373,12 +384,41 @@ pub fn seed_simulated_production_index(store: &Arc<BrainStore>, snapshot: &Skill
     Ok(indexed + filler)
 }
 
-pub fn run_skills_sh_eval(snapshot_path: &Path, golden_path: &Path) -> Result<SkillsShEvalReport> {
+pub fn build_fixture_db(
+    snapshot_path: &Path,
+    index_size: usize,
+    write_path: &Path,
+) -> Result<FixtureBuildReport> {
     let snapshot = load_snapshot(snapshot_path)?;
-    let golden = load_golden(golden_path)?;
-    let (engine, _dir) = new_isolated_engine()?;
-    let total = seed_simulated_production_index(&engine.store, &snapshot)?;
+    let dir = tempfile::tempdir()?;
+    let config = crate::config::Config::isolated(dir.path().to_path_buf());
+    config.ensure_dirs()?;
+    let db_path = config.db_path.clone();
+    let store = Arc::new(BrainStore::open(&db_path)?);
+    let total = seed_simulated_production_index(&store, &snapshot, index_size)?;
+    stamp_fixture_meta(
+        &store,
+        FIXTURE_DB_KIND_SKILLS_SH,
+        total,
+        snapshot.skills.len(),
+    )?;
+    export_fixture_db(&store, &db_path, write_path)?;
+    Ok(FixtureBuildReport {
+        write_path: write_path.display().to_string(),
+        index_size: total,
+        snapshot_skills: snapshot.skills.len(),
+        recipe_version: crate::fixture::FIXTURE_DB_RECIPE_VERSION.into(),
+    })
+}
 
+fn run_skills_sh_eval_on_engine(
+    engine: &crate::engine::Engine,
+    golden: &SkillsShGoldenFile,
+    snapshot_skills: usize,
+    index_size: usize,
+    fixture_db: Option<&Path>,
+    index_mode: &str,
+) -> Result<SkillsShEvalReport> {
     let limits = RouteLimits {
         agents: 0,
         skills: 3,
@@ -425,8 +465,10 @@ pub fn run_skills_sh_eval(snapshot_path: &Path, golden_path: &Path) -> Result<Sk
     let passed_gate = recall_at_3 >= SKILLS_SH_RECALL_THRESHOLD;
 
     Ok(SkillsShEvalReport {
-        snapshot_skills: snapshot.skills.len(),
-        simulated_index_size: total,
+        snapshot_skills,
+        simulated_index_size: index_size,
+        fixture_db: fixture_db.map(|p| p.display().to_string()),
+        index_mode: index_mode.into(),
         cases,
         passed,
         recall_at_3,
@@ -434,6 +476,39 @@ pub fn run_skills_sh_eval(snapshot_path: &Path, golden_path: &Path) -> Result<Sk
         failures,
         passed_gate,
     })
+}
+
+pub fn run_skills_sh_eval(
+    snapshot_path: &Path,
+    golden_path: &Path,
+    fixture_db: Option<&Path>,
+) -> Result<SkillsShEvalReport> {
+    let golden = load_golden(golden_path)?;
+
+    if let Some(db_path) = fixture_db {
+        let (engine, _dir) = open_fixture_engine(db_path)?;
+        let meta = crate::fixture::read_fixture_meta(db_path)?;
+        return run_skills_sh_eval_on_engine(
+            &engine,
+            &golden,
+            meta.snapshot_skills,
+            meta.index_size,
+            Some(db_path),
+            "fixture-db",
+        );
+    }
+
+    let snapshot = load_snapshot(snapshot_path)?;
+    let (engine, _dir) = new_isolated_engine()?;
+    let total = seed_simulated_production_index(&engine.store, &snapshot, SKILLS_SH_SIMULATED_INDEX)?;
+    run_skills_sh_eval_on_engine(
+        &engine,
+        &golden,
+        snapshot.skills.len(),
+        total,
+        None,
+        "runtime-seed",
+    )
 }
 
 pub fn assert_skills_sh_gate(report: &SkillsShEvalReport) -> Result<()> {

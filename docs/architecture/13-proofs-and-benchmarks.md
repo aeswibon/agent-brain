@@ -44,6 +44,7 @@ cargo run --release -p agent-brain -- eval --ci --live
 cargo run --release -p agent-brain -- bench --ci
 
 # skills.sh catalog (committed snapshot + 2000 fillers)
+cargo run --release -p agent-brain -- fixture build --write docs/benchmarks/fixture-2k.db
 cargo run --release -p agent-brain -- eval --skills-sh --write docs/benchmarks/skills-sh-latest.json
 
 # Criterion (local, not CI)

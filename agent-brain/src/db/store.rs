@@ -507,6 +507,19 @@ impl BrainStore {
         })
     }
 
+    /// Flush WAL pages into the main db file (for committing a portable fixture).
+    pub fn checkpoint_wal(&self) -> Result<()> {
+        let conn = self.conn.lock().map_err(|e| anyhow::anyhow!("{e}"))?;
+        conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")?;
+        Ok(())
+    }
+
+    pub fn count_indexed_items(&self) -> Result<usize> {
+        let conn = self.conn.lock().map_err(|e| anyhow::anyhow!("{e}"))?;
+        let n: i64 = conn.query_row("SELECT COUNT(*) FROM indexed_items", [], |r| r.get(0))?;
+        Ok(n as usize)
+    }
+
     pub fn set_meta(&self, key: &str, value: &str) -> Result<()> {
         self.with_conn(|conn| {
             conn.execute(

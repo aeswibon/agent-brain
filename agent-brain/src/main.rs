@@ -614,13 +614,28 @@ async fn main() -> Result<()> {
             let live = args.iter().any(|a| a == "--live");
             let skills_sh = args.iter().any(|a| a == "--skills-sh");
             if skills_sh {
+                let seed_runtime = args.iter().any(|a| a == "--seed");
                 let snapshot = flag_value(&args, "--snapshot")
                     .map(PathBuf::from)
                     .unwrap_or_else(agent_brain::skills_sh::default_snapshot_path);
                 let golden = flag_value(&args, "--golden")
                     .map(PathBuf::from)
                     .unwrap_or_else(agent_brain::skills_sh::default_golden_path);
-                let report = agent_brain::skills_sh::run_skills_sh_eval(&snapshot, &golden)?;
+                let fixture_db: Option<PathBuf> = if seed_runtime {
+                    None
+                } else {
+                    flag_value(&args, "--fixture-db")
+                        .map(PathBuf::from)
+                        .or_else(|| {
+                            let default = agent_brain::fixture::default_fixture_2k_path();
+                            default.exists().then_some(default)
+                        })
+                };
+                let report = agent_brain::skills_sh::run_skills_sh_eval(
+                    &snapshot,
+                    &golden,
+                    fixture_db.as_deref(),
+                )?;
                 println!("{}", serde_json::to_string_pretty(&report)?);
                 if let Some(path) = flag_value(&args, "--write") {
                     let json = serde_json::to_string_pretty(&report)?;
@@ -632,10 +647,12 @@ async fn main() -> Result<()> {
                 }
             } else if !args.iter().any(|a| a == "--ci") {
                 eprintln!("Usage: agent-brain eval --ci [--live]");
-                eprintln!("       agent-brain eval --skills-sh [--snapshot PATH] [--golden PATH] [--write PATH]");
-                eprintln!("  --ci          Run Recall@3 gate (default: isolated fixture DB)");
-                eprintln!("  --live        Use ~/.agent_brain brain.db (not for CI)");
-                eprintln!("  --skills-sh   Run skills.sh snapshot eval (~2000 simulated index)");
+                eprintln!("       agent-brain eval --skills-sh [--fixture-db PATH] [--seed] [--write PATH]");
+                eprintln!("  --ci            Run Recall@3 gate (default: isolated fixture DB)");
+                eprintln!("  --live          Use ~/.agent_brain brain.db (not for CI)");
+                eprintln!("  --skills-sh     Run skills.sh Recall@3 (~2000 index)");
+                eprintln!("  --fixture-db    Committed benchmark DB (default: docs/benchmarks/fixture-2k.db)");
+                eprintln!("  --seed          Seed index at runtime from snapshot instead of fixture DB");
                 std::process::exit(1);
             } else {
             let report = if live {
@@ -652,6 +669,46 @@ async fn main() -> Result<()> {
                 eprintln!("{err}");
                 std::process::exit(1);
             }
+            }
+        }
+        "fixture" => {
+            let sub = args.get(2).map(String::as_str).unwrap_or("");
+            match sub {
+                "build" => {
+                    let snapshot = flag_value(&args, "--snapshot")
+                        .map(PathBuf::from)
+                        .unwrap_or_else(agent_brain::skills_sh::default_snapshot_path);
+                    let write_path = flag_value(&args, "--write")
+                        .map(PathBuf::from)
+                        .unwrap_or_else(agent_brain::fixture::default_fixture_2k_path);
+                    let index_size = flag_value(&args, "--index-size")
+                        .and_then(|v| v.parse().ok())
+                        .unwrap_or(agent_brain::skills_sh::SKILLS_SH_SIMULATED_INDEX);
+                    let report = agent_brain::skills_sh::build_fixture_db(
+                        &snapshot,
+                        index_size,
+                        &write_path,
+                    )?;
+                    println!("{}", serde_json::to_string_pretty(&report)?);
+                    eprintln!(
+                        "Built fixture DB ({} skills, {} snapshot) → {}",
+                        report.index_size,
+                        report.snapshot_skills,
+                        write_path.display()
+                    );
+                }
+                "verify" => {
+                    let path = flag_value(&args, "--db")
+                        .map(PathBuf::from)
+                        .unwrap_or_else(agent_brain::fixture::default_fixture_2k_path);
+                    let meta = agent_brain::fixture::read_fixture_meta(&path)?;
+                    println!("{}", serde_json::to_string_pretty(&meta)?);
+                }
+                _ => {
+                    eprintln!("Usage: agent-brain fixture build [--snapshot PATH] [--index-size N] [--write PATH]");
+                    eprintln!("       agent-brain fixture verify [--db PATH]");
+                    std::process::exit(1);
+                }
             }
         }
         "skills-sh" => {
@@ -797,7 +854,8 @@ Usage:
   agent-brain digest --weekly                 Operator digest from retrieval_log
   agent-brain eval --ci [--live]                 Recall@3 gate (isolated fixture; --live uses brain.db)
   agent-brain bench --ci                         Latency gate on 500-skill fixture (isolated)
-  agent-brain eval --skills-sh [--write PATH]   skills.sh snapshot Recall@3 (~2000 index)
+  agent-brain eval --skills-sh [--fixture-db PATH]   skills.sh Recall@3 (~2000 index)
+  agent-brain fixture build [--index-size N]      Build committed fixture-2k.db from snapshot
   agent-brain skills-sh sync [--max N]          Refresh skills.sh snapshot from public API
   agent-brain --version                       Same as version (prints version only)
 

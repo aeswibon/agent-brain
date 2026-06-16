@@ -273,12 +273,29 @@ fn eval_ci_meets_recall_gate() {
 }
 
 #[test]
-fn skills_sh_eval_passes_on_committed_snapshot() {
+fn skills_sh_eval_passes_on_committed_fixture_db() {
+    let fixture = agent_brain::fixture::default_fixture_2k_path();
+    assert!(
+        fixture.exists(),
+        "missing {} — run: cargo run -p agent-brain -- fixture build",
+        fixture.display()
+    );
     let snapshot = agent_brain::skills_sh::default_snapshot_path();
     let golden = agent_brain::skills_sh::default_golden_path();
-    let report = agent_brain::skills_sh::run_skills_sh_eval(&snapshot, &golden).unwrap();
+    let report =
+        agent_brain::skills_sh::run_skills_sh_eval(&snapshot, &golden, Some(&fixture)).unwrap();
     agent_brain::skills_sh::assert_skills_sh_gate(&report).unwrap();
+    assert_eq!(report.index_mode, "fixture-db");
     assert_eq!(report.simulated_index_size, agent_brain::skills_sh::SKILLS_SH_SIMULATED_INDEX);
+}
+
+#[test]
+fn skills_sh_eval_passes_runtime_seed() {
+    let snapshot = agent_brain::skills_sh::default_snapshot_path();
+    let golden = agent_brain::skills_sh::default_golden_path();
+    let report = agent_brain::skills_sh::run_skills_sh_eval(&snapshot, &golden, None).unwrap();
+    agent_brain::skills_sh::assert_skills_sh_gate(&report).unwrap();
+    assert_eq!(report.index_mode, "runtime-seed");
 }
 
 #[test]
