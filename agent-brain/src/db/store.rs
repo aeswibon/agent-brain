@@ -663,6 +663,77 @@ impl BrainStore {
         Ok(id)
     }
 
+    pub fn list_secret_refs(&self) -> Result<Vec<crate::secrets::SecretRef>> {
+        self.with_conn(|conn| {
+            let mut stmt =
+                conn.prepare("SELECT name, used_by FROM secret_refs ORDER BY name ASC")?;
+            let rows = stmt
+                .query_map([], |row| {
+                    Ok(crate::secrets::SecretRef {
+                        name: row.get(0)?,
+                        used_by: row.get(1)?,
+                    })
+                })?
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(rows)
+        })
+    }
+
+    pub fn upsert_secret_ref(&self, name: &str, used_by: &str) -> Result<()> {
+        let now = chrono::Utc::now().timestamp_millis();
+        self.with_conn(|conn| {
+            conn.execute(
+                "INSERT INTO secret_refs (name, used_by, created_at) VALUES (?1, ?2, ?3)
+                 ON CONFLICT(name) DO UPDATE SET used_by = excluded.used_by",
+                params![name, used_by, now],
+            )?;
+            Ok(())
+        })
+    }
+
+    pub fn merge_secret_refs(&self, refs: &[crate::secrets::SecretRef]) -> Result<usize> {
+        let mut added = 0usize;
+        for reference in refs {
+            let exists = self.with_conn(|conn| {
+                Ok(conn
+                    .query_row(
+                        "SELECT 1 FROM secret_refs WHERE name = ?1 LIMIT 1",
+                        params![reference.name],
+                        |_| Ok(()),
+                    )
+                    .optional()?
+                    .is_some())
+            })?;
+            if !exists {
+                self.upsert_secret_ref(&reference.name, &reference.used_by)?;
+                added += 1;
+            }
+        }
+        Ok(added)
+    }
+
+    pub fn cloud_last_push_ms(&self) -> Result<Option<i64>> {
+        Ok(self
+            .get_meta("cloud_last_push_ms")?
+            .and_then(|v| v.parse().ok()))
+    }
+
+    pub fn cloud_last_pull_ms(&self) -> Result<Option<i64>> {
+        Ok(self
+            .get_meta("cloud_last_pull_ms")?
+            .and_then(|v| v.parse().ok()))
+    }
+
+    pub fn set_cloud_last_push(&self) -> Result<()> {
+        let now = chrono::Utc::now().timestamp_millis();
+        self.set_meta("cloud_last_push_ms", &now.to_string())
+    }
+
+    pub fn set_cloud_last_pull(&self) -> Result<()> {
+        let now = chrono::Utc::now().timestamp_millis();
+        self.set_meta("cloud_last_pull_ms", &now.to_string())
+    }
+
     pub fn list_export_facts(&self) -> Result<Vec<serde_json::Value>> {
         self.with_conn(|conn| {
             let now = chrono::Utc::now().timestamp_millis();

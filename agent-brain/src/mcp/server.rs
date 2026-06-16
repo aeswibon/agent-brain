@@ -71,7 +71,16 @@ impl BrainMcp {
                             if let Err(err) =
                                 crate::sync::git_push(&store, &home, &settings.sync.git)
                             {
-                                tracing::warn!(target: "agent_brain::sync", "auto_push failed: {err}");
+                                tracing::warn!(target: "agent_brain::sync", "git auto_push failed: {err}");
+                            }
+                        }
+                        if settings.sync.cloud.enabled && settings.sync.cloud.auto_push {
+                            if let Err(err) = crate::sync::cloud_push(
+                                &store,
+                                &home,
+                                &settings.sync.cloud,
+                            ) {
+                                tracing::warn!(target: "agent_brain::sync", "cloud auto_push failed: {err}");
                             }
                         }
                     }

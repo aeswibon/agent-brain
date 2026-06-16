@@ -26,12 +26,26 @@ pub struct SyncSettings {
 pub struct CloudSyncSettings {
     #[serde(default)]
     pub enabled: bool,
+    #[serde(default = "default_cloud_provider")]
+    pub provider: String,
     #[serde(default)]
     pub bucket: String,
     #[serde(default = "default_cloud_key")]
     pub key: String,
+    #[serde(default = "default_true")]
+    pub encrypt: bool,
     #[serde(default = "default_encryption_key_env")]
     pub encryption_key_env: String,
+    #[serde(default)]
+    pub region: String,
+    #[serde(default)]
+    pub endpoint: String,
+    #[serde(default)]
+    pub auto_push: bool,
+}
+
+fn default_cloud_provider() -> String {
+    "s3".into()
 }
 
 fn default_cloud_key() -> String {
@@ -46,9 +60,14 @@ impl Default for CloudSyncSettings {
     fn default() -> Self {
         Self {
             enabled: false,
+            provider: default_cloud_provider(),
             bucket: String::new(),
             key: default_cloud_key(),
+            encrypt: true,
             encryption_key_env: default_encryption_key_env(),
+            region: String::new(),
+            endpoint: String::new(),
+            auto_push: false,
         }
     }
 }

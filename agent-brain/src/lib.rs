@@ -14,6 +14,7 @@ pub mod intelligence;
 pub mod sync;
 pub mod observability;
 pub mod route_briefing;
+pub mod secrets;
 pub mod sessions;
 pub mod settings;
 pub mod tokens;

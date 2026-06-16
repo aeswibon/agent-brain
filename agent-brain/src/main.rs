@@ -245,6 +245,7 @@ async fn main() -> Result<()> {
                     let status = agent_brain::sync::sync_status(
                         &config.home,
                         &brain_settings.sync.git,
+                        &brain_settings.sync.cloud,
                         &store,
                     )?;
                     println!("{}", serde_json::to_string_pretty(&status)?);
@@ -266,8 +267,37 @@ async fn main() -> Result<()> {
                 "cloud" => {
                     let cloud_cmd = args.get(3).map(String::as_str).unwrap_or("help");
                     match cloud_cmd {
-                        "push" => agent_brain::sync::cloud_push(&brain_settings.sync.cloud)?,
-                        "pull" => agent_brain::sync::cloud_pull(&brain_settings.sync.cloud)?,
+                        "push" => {
+                            let store =
+                                agent_brain::db::store::BrainStore::open(&config.db_path)?;
+                            agent_brain::sync::cloud_push(
+                                &store,
+                                &config.home,
+                                &brain_settings.sync.cloud,
+                            )?;
+                            println!(
+                                "Pushed encrypted bundle to {} ({})",
+                                brain_settings.sync.cloud.bucket, brain_settings.sync.cloud.key
+                            );
+                        }
+                        "pull" => {
+                            let engine = Arc::new(Engine::new(config)?);
+                            let report = agent_brain::sync::cloud_pull(
+                                &engine.store,
+                                &engine.embedder,
+                                &engine.config.home,
+                                &brain_settings.sync.cloud,
+                            )?;
+                            engine.store.bump_index_version()?;
+                            engine.bootstrap(None)?;
+                            println!(
+                                "Pulled and imported {} facts (deduped {}, conflicts {}, skipped {})",
+                                report.import.imported,
+                                report.import.deduplicated,
+                                report.import.conflicts_resolved,
+                                report.import.skipped
+                            );
+                        }
                         _ => {
                             eprintln!("Usage: agent-brain sync cloud push|pull");
                             std::process::exit(1);
@@ -364,6 +394,34 @@ async fn main() -> Result<()> {
         "doctor" => {
             let fix = args.iter().any(|a| a == "--fix");
             doctor::run(fix)?;
+        }
+        "secrets" => {
+            let config = Config::load()?;
+            config.ensure_dirs()?;
+            let store = agent_brain::db::store::BrainStore::open(&config.db_path)?;
+            let sub = args.get(2).map(String::as_str).unwrap_or("status");
+            match sub {
+                "status" => {
+                    let status = agent_brain::secrets::secrets_status(&store)?;
+                    println!("{}", serde_json::to_string_pretty(&status)?);
+                }
+                "setup" => agent_brain::secrets::setup_missing_interactive(&store)?,
+                "add" => {
+                    let name = args
+                        .get(3)
+                        .context("usage: agent-brain secrets add <NAME> --used-by <target>")?;
+                    let used_by = flag_value(&args, "--used-by")
+                        .unwrap_or_else(|| "upstream_mcp".into());
+                    store.upsert_secret_ref(name, &used_by)?;
+                    println!("Registered secret ref {name} (used by {used_by})");
+                }
+                _ => {
+                    eprintln!("Usage: agent-brain secrets status");
+                    eprintln!("       agent-brain secrets setup");
+                    eprintln!("       agent-brain secrets add <NAME> --used-by <target>");
+                    std::process::exit(1);
+                }
+            }
         }
         "inspect" => {
             let config = Config::load()?;
@@ -465,7 +523,8 @@ Usage:
   agent-brain sync git push                   Export bundle, commit, push to origin
   agent-brain sync git pull                   Pull from origin and import bundle
   agent-brain sync git status                 Show git sync repo state
-  agent-brain sync cloud push|pull            Encrypted cloud sync (S3 groundwork)
+  agent-brain sync cloud push|pull            Encrypted cloud sync (S3 / local provider)
+  agent-brain secrets status|setup|add        Keychain secret refs for upstream MCP
   agent-brain doctor                          Check MCP install, binary, hooks, codesign
   agent-brain doctor --fix                    Re-sign binary (macOS), align mcp.json, refresh hooks
   agent-brain inspect log [--last]            List retrieval logs (what route_task returned)

@@ -7,6 +7,7 @@ use sha2::{Digest, Sha256};
 
 use crate::db::store::{content_hash, BrainStore};
 use crate::embed::Embedder;
+use crate::secrets::SecretRef;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SyncSource {
@@ -122,6 +123,11 @@ pub fn export_bundle(store: &BrainStore, home: &Path, dest: Option<&Path>) -> Re
         serde_json::to_string_pretty(&manifest)?,
     )?;
     fs::write(out_dir.join("facts.jsonl"), facts_body)?;
+    let secret_refs = store.list_secret_refs()?;
+    fs::write(
+        out_dir.join("secret_refs.json"),
+        serde_json::to_string_pretty(&secret_refs)?,
+    )?;
 
     Ok(out_dir)
 }
@@ -152,6 +158,14 @@ pub fn import_bundle(
         let remote: BundleFact = serde_json::from_str(line).context("parse facts.jsonl line")?;
         import_one_fact(store, embedder, &remote, policy, sync_source, &mut report)?;
     }
+
+    let refs_path = bundle_path.join("secret_refs.json");
+    if refs_path.is_file() {
+        let raw = fs::read_to_string(&refs_path).context("read secret_refs.json")?;
+        let refs: Vec<SecretRef> = serde_json::from_str(&raw).context("parse secret_refs.json")?;
+        store.merge_secret_refs(&refs)?;
+    }
+
     Ok(report)
 }
 

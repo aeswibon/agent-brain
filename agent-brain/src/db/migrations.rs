@@ -128,6 +128,15 @@ pub fn run(conn: &Connection) -> rusqlite::Result<()> {
         conn.execute("UPDATE schema_version SET version = 4", [])?;
     }
 
+    let version: i64 = conn
+        .query_row("SELECT version FROM schema_version LIMIT 1", [], |r| r.get(0))
+        .unwrap_or(0);
+
+    if version < 5 {
+        migrate_v5(conn)?;
+        conn.execute("UPDATE schema_version SET version = 5", [])?;
+    }
+
     Ok(())
 }
 
@@ -205,5 +214,18 @@ fn migrate_v4(conn: &Connection) -> rusqlite::Result<()> {
             [],
         )?;
     }
+    Ok(())
+}
+
+fn migrate_v5(conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS secret_refs (
+            name TEXT PRIMARY KEY,
+            used_by TEXT NOT NULL,
+            created_at INTEGER NOT NULL
+        );
+        "#,
+    )?;
     Ok(())
 }

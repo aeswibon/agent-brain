@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-06-16
+
+### Added
+
+- **Sync S3 (cloud):** `sync cloud push|pull` with tar.zst bundle + age encryption (`AGENT_BRAIN_SYNC_KEY`); S3-compatible storage via opendal (AWS S3, R2, MinIO); `provider = "local"` for dev/tests.
+- **Secret refs:** `secret_refs` table + `secret_refs.json` in sync bundles (names only, never values); `agent-brain secrets status|setup|add` with OS keychain storage.
+- **`sync status` cloud fields:** `last_push`, `last_pull`, `artifact_present`.
+- **`sync.cloud.auto_push`** — optional cloud push after `store_memory` (when `sync.cloud.enabled`).
+
+### Changed
+
+- Schema v5: `secret_refs` table.
+
 ## [0.6.1] - 2026-06-16
 
 ### Added
