@@ -154,13 +154,82 @@ fn parse_file(path: &Path, repo: Option<&Path>, package: Option<String>) -> Opti
 }
 
 fn extract_skill_text(content: &str, name: &str) -> String {
-    if let Some(rest) = content.strip_prefix("---") {
-        if let Some(end) = rest.find("---") {
-            let front = &rest[..end];
-            return format!("{name} {front}").chars().take(800).collect();
+    let mut parts = vec![name.to_string()];
+    let body = if let Some((front, body)) = split_yaml_frontmatter(content) {
+        if let Some(desc) = yaml_scalar_field(front, "description") {
+            parts.push(desc);
+        }
+        if let Some(yaml_name) = yaml_scalar_field(front, "name") {
+            if yaml_name != name {
+                parts.push(yaml_name);
+            }
+        }
+        body.to_string()
+    } else {
+        content.to_string()
+    };
+    if let Some(activation) = extract_activation_section(&body) {
+        parts.push(activation);
+    }
+    let body_snippet: String = body.lines().take(20).collect::<Vec<_>>().join(" ");
+    if !body_snippet.is_empty() {
+        parts.push(body_snippet);
+    }
+    parts.join(" ").chars().take(800).collect()
+}
+
+/// Pull "When to use / activate" bullets from skill body — primary routing signal.
+fn extract_activation_section(body: &str) -> Option<String> {
+    let lower = body.to_lowercase();
+    let markers = [
+        "when to activate",
+        "when to use",
+        "use when",
+        "triggers",
+        "trigger when",
+    ];
+    let start = markers
+        .iter()
+        .filter_map(|m| lower.find(m))
+        .min()?;
+    let slice = &body[start..];
+    let section: String = slice
+        .lines()
+        .take(12)
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
+    if section.len() < 20 {
+        return None;
+    }
+    Some(section.chars().take(400).collect())
+}
+
+fn split_yaml_frontmatter(content: &str) -> Option<(&str, &str)> {
+    let rest = content.strip_prefix("---")?;
+    let end = rest.find("\n---")?;
+    let front = &rest[..end];
+    let body = rest[end + 4..].trim_start();
+    Some((front, body))
+}
+
+fn yaml_scalar_field(frontmatter: &str, key: &str) -> Option<String> {
+    let prefix = format!("{key}:");
+    for line in frontmatter.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with(&prefix) {
+            let mut val = trimmed[prefix.len()..].trim().to_string();
+            if val.starts_with('>') || val.starts_with('|') {
+                continue;
+            }
+            val = val.trim_matches('"').trim_matches('\'').to_string();
+            if !val.is_empty() {
+                return Some(val);
+            }
         }
     }
-    content.chars().take(800).collect()
+    None
 }
 
 fn extract_agent_text(content: &str, name: &str) -> String {

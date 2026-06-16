@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Architecture documentation series** — `docs/architecture/` (12 articles): design goals, retrieval, memory, hooks, sync, operator loop, routing accuracy USP, decisions log.
+- **Hybrid retrieval** — `route_task` always uses embeddings plus BM25 and lexical term overlap (no BM25-only fast path).
+- **Skill indexing** — YAML `description`, `name`, and "When to activate" sections are indexed for search.
+- **Skill routing eval** — `eval --ci` gates both memory and skills at Recall@3 ≥ 0.85 (6 skill golden cases with decoys).
+- **Architecture docs** — expanded PE/senior-dev sections (invariants, failure modes, evaluation questions) across `docs/architecture/`.
+- **Doctor** — reports OpenCode and Claude Code global MCP status; `doctor --fix` runs `install --all`.
+
+### Changed
+
+- **FTS prefilter** — strict AND across significant terms first, loose OR fallback when recall is low; general synonym expansion (PR/pull request, test/pytest, etc.).
+- **Recommendation threshold** — weak skill/agent/rule hits below relative minimum score are dropped from `route_task` output.
+- **Memory candidate pool** — reduced from 50 to 12 extra memories in scoring to avoid crowding skills.
+- **fastembed cache** — ONNX models cache under `~/.agent_brain/cache/fastembed` (not project cwd).
+
 ## [0.11.0] - 2026-06-16
 
 ### Added

@@ -259,6 +259,65 @@ fn route_task_respects_max_tokens() {
 }
 
 #[test]
+fn routes_skill_with_matching_description_over_unrelated_skill() {
+    let dir = TempDir::new().unwrap();
+    let config = test_config(&dir);
+    config.ensure_dirs().unwrap();
+    let store = BrainStore::open(&config.db_path).unwrap();
+
+    let review_desc = "Use when reviewing pull request changes, diffs, and merge readiness";
+    let cooking_desc = "Weeknight pasta recipes and baking tips for home cooks";
+    let query = "let's review the changes on the PR";
+
+    for (topic, text) in [
+        ("code-review", review_desc),
+        ("cooking-tips", cooking_desc),
+    ] {
+        let emb = deterministic_embedding(&format!("{topic} {text}"));
+        store
+            .upsert_indexed_item(
+                ItemType::Skill,
+                topic,
+                text,
+                &format!("/skills/{topic}/SKILL.md"),
+                "global",
+                None,
+                &content_hash(text),
+                Some(&emb),
+            )
+            .unwrap();
+    }
+
+    let engine = Engine::new_with_store(config, Arc::new(store)).unwrap();
+    let resp = engine
+        .route_task(
+            query,
+            None,
+            &[],
+            500,
+            RouteLimits {
+                agents: 0,
+                skills: 3,
+                rules: 0,
+                memory: 0,
+            },
+            None,
+        )
+        .unwrap();
+
+    let top = resp
+        .recommended_skills
+        .first()
+        .map(|s| s.name.as_str())
+        .unwrap_or("");
+    assert_eq!(
+        top, "code-review",
+        "expected description-matched skill, got {:?}",
+        resp.recommended_skills
+    );
+}
+
+#[test]
 fn token_estimate_is_reasonable() {
     let text = "hello world";
     assert!(estimate_tokens(text) >= 2);

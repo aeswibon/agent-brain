@@ -73,6 +73,8 @@ You still use Cursor Agent mode. agent-brain does not replace the model — it *
 
 **Full operator guide:** [docs/USAGE.md](docs/USAGE.md)
 
+**Architecture deep dive (series):** [docs/architecture/README.md](docs/architecture/README.md) — design goals, rationale, and alternatives for each major component.
+
 ---
 
 ## Complete setup (copy & paste)

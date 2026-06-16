@@ -42,6 +42,11 @@ pub fn run(fix: bool) -> Result<()> {
             if fix {
                 println!("  fixing:                agent-brain install --global");
                 crate::install::configure_cursor(true, &exe, false)?;
+                let _ = crate::host_install::install_host(
+                    crate::host_install::HostTarget::All,
+                    &exe,
+                    true,
+                );
                 println!("  mcp path:              realigned to {}", exe.display());
                 ok = true;
             } else {
@@ -129,6 +134,8 @@ pub fn run(fix: bool) -> Result<()> {
         println!("  last route briefing:   not yet (appears after first route_task)");
     }
 
+    print_other_hosts(&home);
+
     let serve = crate::serve_meta::assess(&config.home, mcp_binary.as_deref());
     if let Some(meta) = &serve.meta {
         let alive = if serve.process_alive { "running" } else { "not running" };
@@ -160,6 +167,8 @@ pub fn run(fix: bool) -> Result<()> {
     println!();
     println!("Tips:");
     println!("  • agent-brain briefing — readable route without expanding MCP JSON");
+    println!("  • agent-brain install --all --global — MCP + instructions for Cursor, OpenCode, Claude Code, VS Code");
+    println!("  • Only Cursor has hook enforcement (route_gate); other hosts rely on instructions + MCP config");
     println!("  • Background auto-update during serve can exec a new binary after idle (see config auto_update.mcp.restart_after_update)");
     println!("  • macOS: linker-signed binaries are killed by taskgated — doctor --fix adhoc re-signs");
     println!("  • spctl may reject adhoc local builds; that is OK if codesign shows adhoc, not linker-signed");
@@ -171,6 +180,33 @@ pub fn run(fix: bool) -> Result<()> {
         std::process::exit(1);
     }
     Ok(())
+}
+
+fn print_other_hosts(home: &Path) {
+    let opencode = home.join(".config/opencode/opencode.json");
+    let claude = home.join(".claude.json");
+    println!("  opencode (global):     {}", host_mcp_status(&opencode, "mcp", "agent-brain"));
+    println!("  claude-code (global):  {}", host_mcp_status(&claude, "mcpServers", "agent-brain"));
+}
+
+fn host_mcp_status(path: &Path, servers_key: &str, server_name: &str) -> &'static str {
+    if !path.is_file() {
+        return "not configured";
+    }
+    let Ok(raw) = fs::read_to_string(path) else {
+        return "unreadable";
+    };
+    let Ok(root) = serde_json::from_str::<serde_json::Value>(&raw) else {
+        return "invalid json";
+    };
+    if root
+        .pointer(&format!("/{servers_key}/{server_name}"))
+        .is_some()
+    {
+        "OK"
+    } else {
+        "missing agent-brain entry"
+    }
 }
 
 fn mcp_binary_path(mcp_path: &Path) -> Result<Option<PathBuf>> {

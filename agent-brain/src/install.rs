@@ -346,6 +346,7 @@ pub fn mcp_server_entry(exe: &Path) -> Value {
         env!("CARGO_PKG_VERSION"),
         chrono::Utc::now().timestamp()
     );
+    let cache_dir = crate::embed::default_cache_dir();
     json!({
         "command": exe.display().to_string(),
         "args": ["serve"],
@@ -356,6 +357,7 @@ pub fn mcp_server_entry(exe: &Path) -> Value {
             "AGENT_BRAIN_BOOTSTRAP_INTERVAL_SEC": "3600",
             "AGENT_BRAIN_AUTO_UPDATE_DELAY_SEC": "60",
             "AGENT_BRAIN_SESSION_INGEST_DELAY_SEC": "180",
+            "FASTEMBED_CACHE_DIR": cache_dir.display().to_string(),
             "AGENT_BRAIN_BUILD": build_id
         }
     })

@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::sync::Mutex;
 
 use anyhow::{Context, Result};
@@ -7,6 +8,7 @@ pub struct Embedder {
     model: Mutex<Option<TextEmbedding>>,
     model_kind: EmbeddingModel,
     deterministic: bool,
+    cache_dir: PathBuf,
     pub model_id: &'static str,
 }
 
@@ -21,16 +23,23 @@ impl Embedder {
             model: Mutex::new(None),
             model_kind: EmbeddingModel::AllMiniLML6V2,
             deterministic: true,
+            cache_dir: default_cache_dir(),
             model_id: "deterministic",
         }
     }
 
     pub fn with_model(model: EmbeddingModel) -> Result<Self> {
+        Self::with_model_and_cache(model, default_cache_dir())
+    }
+
+    pub fn with_model_and_cache(model: EmbeddingModel, cache_dir: PathBuf) -> Result<Self> {
         let model_id = embedding_model_name(&model);
+        std::fs::create_dir_all(&cache_dir).ok();
         Ok(Self {
             model: Mutex::new(None),
             model_kind: model,
             deterministic: false,
+            cache_dir,
             model_id,
         })
     }
@@ -46,7 +55,9 @@ impl Embedder {
         if guard.is_none() {
             *guard = Some(
                 TextEmbedding::try_new(
-                    InitOptions::new(self.model_kind.clone()).with_show_download_progress(false),
+                    InitOptions::new(self.model_kind.clone())
+                        .with_cache_dir(self.cache_dir.clone())
+                        .with_show_download_progress(false),
                 )
                 .context("init fastembed")?,
             );
@@ -113,6 +124,18 @@ pub fn deterministic_embedding(text: &str) -> Vec<f32> {
     }
     l2_normalize(&mut v);
     v
+}
+
+pub fn default_cache_dir() -> PathBuf {
+    if let Ok(dir) = std::env::var("FASTEMBED_CACHE_DIR") {
+        return PathBuf::from(dir);
+    }
+    if let Ok(home) = std::env::var("AGENT_BRAIN_HOME") {
+        return PathBuf::from(home).join("cache").join("fastembed");
+    }
+    dirs::home_dir()
+        .map(|h| h.join(".agent_brain").join("cache").join("fastembed"))
+        .unwrap_or_else(|| PathBuf::from(".fastembed_cache"))
 }
 
 pub fn parse_embedding_model(name: &str) -> EmbeddingModel {

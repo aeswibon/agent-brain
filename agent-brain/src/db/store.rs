@@ -15,7 +15,7 @@ use crate::types::{ItemType, ScoredItem};
 
 const BM25_ITEMS_TOP: usize = 150;
 const BM25_FACTS_TOP: usize = 40;
-const MIN_CANDIDATES: usize = 50;
+const MIN_CANDIDATES: usize = 15;
 const FALLBACK_RECENT: usize = 80;
 const QUERY_EMBEDDING_CACHE_MAX: usize = 500;
 const BM25_FAST_PATH_MIN_STRENGTH: f64 = 2.5;
@@ -336,6 +336,33 @@ impl BrainStore {
     }
 
     pub fn bm25_search_items(&self, query: &str, limit: usize) -> Result<Vec<(String, f64)>> {
+        let strict = crate::retrieval::fts_query_strict(query);
+        let hits = self.bm25_search_items_fts(&strict, limit)?;
+        if hits.len() >= 5 {
+            return Ok(hits);
+        }
+        let loose = crate::retrieval::fts_query_loose(query);
+        if loose == strict {
+            return Ok(hits);
+        }
+        let mut merged = hits;
+        let loose_hits = self.bm25_search_items_fts(&loose, limit)?;
+        for (id, score) in loose_hits {
+            if merged.iter().any(|(existing, _)| existing == &id) {
+                continue;
+            }
+            merged.push((id, score));
+            if merged.len() >= limit {
+                break;
+            }
+        }
+        Ok(merged)
+    }
+
+    fn bm25_search_items_fts(&self, fts_query: &str, limit: usize) -> Result<Vec<(String, f64)>> {
+        if fts_query == "\"\"" {
+            return Ok(Vec::new());
+        }
         self.with_conn(|conn| {
             let mut stmt = conn.prepare(
                 r#"SELECT i.id, bm25(items_fts) AS score
@@ -345,9 +372,8 @@ impl BrainStore {
                    ORDER BY score
                    LIMIT ?2"#,
             )?;
-            let q = sanitize_fts_query(query);
             let rows = stmt
-                .query_map(params![q, limit as i64], |row| {
+                .query_map(params![fts_query, limit as i64], |row| {
                     Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?))
                 })?
                 .collect::<Result<Vec<_>, _>>()?;
@@ -356,6 +382,32 @@ impl BrainStore {
     }
 
     pub fn bm25_search_facts(&self, query: &str, limit: usize) -> Result<Vec<(String, f64)>> {
+        let strict = crate::retrieval::fts_query_strict(query);
+        let hits = self.bm25_search_facts_fts(&strict, limit)?;
+        if hits.len() >= 3 {
+            return Ok(hits);
+        }
+        let loose = crate::retrieval::fts_query_loose(query);
+        if loose == strict {
+            return Ok(hits);
+        }
+        let mut merged = hits;
+        for (id, score) in self.bm25_search_facts_fts(&loose, limit)? {
+            if merged.iter().any(|(existing, _)| existing == &id) {
+                continue;
+            }
+            merged.push((id, score));
+            if merged.len() >= limit {
+                break;
+            }
+        }
+        Ok(merged)
+    }
+
+    fn bm25_search_facts_fts(&self, fts_query: &str, limit: usize) -> Result<Vec<(String, f64)>> {
+        if fts_query == "\"\"" {
+            return Ok(Vec::new());
+        }
         self.with_conn(|conn| {
             let now = chrono::Utc::now().timestamp_millis();
             let mut stmt = conn.prepare(
@@ -368,9 +420,8 @@ impl BrainStore {
                    ORDER BY score
                    LIMIT ?3"#,
             )?;
-            let q = sanitize_fts_query(query);
             let rows = stmt
-                .query_map(params![q, now, limit as i64], |row| {
+                .query_map(params![fts_query, now, limit as i64], |row| {
                     Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?))
                 })?
                 .collect::<Result<Vec<_>, _>>()?;
@@ -1448,6 +1499,7 @@ impl BrainStore {
     pub(crate) fn score_items_with_bm25(
         &self,
         snapshot: &SearchIndexCache,
+        query: &str,
         query_embedding: &[f32],
         bm25: &Bm25Prefilter,
         repo_root: Option<&str>,
@@ -1484,7 +1536,7 @@ impl BrainStore {
             }
         }
 
-        const MAX_EXTRA_MEMORIES: usize = 50;
+        const MAX_EXTRA_MEMORIES: usize = 12;
         let mut included_ids: HashSet<String> = candidates.iter().map(|r| r.id.clone()).collect();
         let mut extra_memories: Vec<&CachedRow> = snapshot
             .memories
@@ -1517,6 +1569,8 @@ impl BrainStore {
         let mut scored = Vec::with_capacity(candidate_count);
         for (row, cosine_sim) in candidates.into_iter().zip(cosine_sims) {
             let item_type = ItemType::parse(&row.item_type).unwrap_or(ItemType::Rule);
+            let lexical =
+                crate::retrieval::lexical_overlap_score(query, &row.topic, &row.text);
 
             let bm25_norm = bm25
                 .bm25_map
@@ -1531,10 +1585,18 @@ impl BrainStore {
                 .unwrap_or(0.0);
 
             let mut score = if bm25_only {
-                0.9 * bm25_norm
+                0.70 * bm25_norm + 0.30 * lexical
             } else {
-                0.7 * cosine_sim + 0.2 * bm25_norm
+                0.55 * cosine_sim + 0.25 * bm25_norm + 0.20 * lexical
             };
+
+            if matches!(item_type, ItemType::Skill | ItemType::Agent) && lexical >= 0.2 {
+                score += 0.10 * lexical;
+            }
+
+            if bm25_norm == 0.0 && lexical < 0.12 {
+                score *= 0.5;
+            }
 
             if let Some(root) = repo_root {
                 if row.scope_key.as_deref() == Some(root) {
@@ -1642,6 +1704,7 @@ impl BrainStore {
         let bm25 = self.bm25_prefilter(query)?;
         self.score_items_with_bm25(
             &snapshot,
+            query,
             query_embedding,
             &bm25,
             repo_root,
@@ -1868,11 +1931,7 @@ fn bytes_to_f32(blob: &[u8]) -> Vec<f32> {
 }
 
 fn sanitize_fts_query(query: &str) -> String {
-    query
-        .split_whitespace()
-        .map(|w| format!("\"{w}\""))
-        .collect::<Vec<_>>()
-        .join(" OR ")
+    crate::retrieval::fts_query_loose(query)
 }
 
 pub fn normalize_fact(text: &str) -> String {

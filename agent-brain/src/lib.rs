@@ -24,6 +24,7 @@ pub mod types;
 pub mod upstream;
 pub mod workspace;
 pub mod promote;
+pub mod retrieval;
 pub mod memory_gc;
 pub mod operator_digest;
 pub mod eval;

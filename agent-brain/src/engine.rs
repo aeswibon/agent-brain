@@ -344,11 +344,8 @@ impl Engine {
             .join()
             .map_err(|_| anyhow::anyhow!("bm25 prefilter thread panicked"))??;
 
-        let bm25_fast_path = self.config.bm25_fast_path_enabled && bm25.fast_path_eligible();
-
-        let (query_emb, embed_cache_hit, embed_us) = if bm25_fast_path {
-            (Vec::new(), false, 0)
-        } else {
+        // Always embed for route_task — BM25-only fast path drops semantic signal for all queries.
+        let (query_emb, embed_cache_hit, embed_us) = {
             let embed_started = Instant::now();
             let (emb, hit) = self.embed_query(query, Some(message_fp))?;
             (emb, hit, embed_started.elapsed().as_micros() as u64)
@@ -364,12 +361,13 @@ impl Engine {
         };
         let (scored, candidates, index_total) = self.store.score_items_with_bm25(
             &snapshot,
+            query,
             &query_emb,
             &bm25,
             repo_root,
             tags,
             boost_agents,
-            bm25_fast_path,
+            false,
             Some(phase),
             Some(&match_ctx),
         )?;
@@ -382,7 +380,7 @@ impl Engine {
             embed_us,
             score_us,
             embed_cache_hit,
-            bm25_fast_path,
+            false,
         ))
     }
 
@@ -584,9 +582,19 @@ fn build_route_response(
     };
     let mut state = RouteBuildState::default();
 
+    let top_non_memory = scored
+        .iter()
+        .filter(|i| !matches!(i.item_type, ItemType::Memory))
+        .map(|i| i.score)
+        .fold(0.0_f64, f64::max);
+    let min_score = crate::retrieval::minimum_recommendation_score(top_non_memory);
+
     // Pass 1: agents, skills, rules — before memory consumes the token budget.
     for item in scored.iter() {
         if matches!(item.item_type, ItemType::Memory) {
+            continue;
+        }
+        if item.score < min_score {
             continue;
         }
         try_add_route_item(&mut resp, &mut state, item, limits, phase, max_tokens);
