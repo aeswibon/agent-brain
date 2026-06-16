@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.3] - 2026-06-16
+
+### Added
+
+- **Gemini / Antigravity session digests** — ingests `~/.gemini/**/transcript.jsonl` (`USER_INPUT` / `<USER_REQUEST>` parser).
+- **OpenCode session digests** — reads user messages from `~/.local/share/opencode/opencode.db` (override with `AGENT_BRAIN_OPENCODE_DB`).
+- **Per-session digest topics** — `session-digest-{source}-{slug}` so each conversation keeps its own fact (no more single colliding `session-digest-cursor` topic).
+- **CLI** — `agent-brain sessions ingest [--source cursor,codex,gemini,opencode] [--legacy]` and `agent-brain sessions status`.
+- **`AGENT_BRAIN_SESSION_HOME`** — override home directory scanned for session files (tests / custom layouts).
+
+### Changed
+
+- Session discovery unified across Cursor, Codex, Gemini, and OpenCode.
+- Digest meta keys use `session_digest:{source}:{session_id}` instead of full file paths.
+
 ## [0.7.2] - 2026-06-16
 
 ### Added

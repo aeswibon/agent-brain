@@ -1,39 +1,92 @@
 //! Session transcript import: structured digests (default) and optional legacy snippet ingest.
 
+mod discover;
 mod digest;
+mod opencode;
+mod parse;
+mod types;
 
+use std::collections::HashMap;
 use std::fs;
 use std::io::{BufRead, BufReader};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::SystemTime;
 
 use anyhow::Result;
 use sha2::{Digest, Sha256};
-use walkdir::WalkDir;
 
 use crate::config::Config;
 use crate::db::store::{content_hash, looks_like_secret, word_count, BrainStore};
 use crate::embed::Embedder;
+
+pub use digest::count_stored_digests_by_source;
+pub use discover::{opencode_db_path, session_scan_home};
+pub use types::{SessionSource, SessionTranscript};
 
 const META_PREFIX: &str = "session_ingest:";
 const MAX_FILES_PER_RUN: usize = 150;
 const MAX_USER_MSGS_PER_FILE: usize = 12;
 const MAX_WORDS: usize = 50;
 
-/// Default session import: structured digests. Legacy snippet ingest is opt-in.
+#[derive(Debug, Default, Clone, serde::Serialize)]
+pub struct SessionIngestReport {
+    pub digests_stored: usize,
+    pub legacy_stored: usize,
+    pub by_source: HashMap<String, usize>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct SessionDiscoverReport {
+    pub total: usize,
+    pub by_source: HashMap<String, usize>,
+}
+
+/// Default session import: structured digests. Legacy snippet ingest when enabled in config.
 pub fn ingest_sessions(
     store: &BrainStore,
     embedder: &Embedder,
     config: &Config,
 ) -> Result<usize> {
+    let report = ingest_sessions_filtered(store, embedder, config, &[], config.session_ingest_legacy)?;
+    Ok(report.digests_stored + report.legacy_stored)
+}
+
+pub fn ingest_sessions_filtered(
+    store: &BrainStore,
+    embedder: &Embedder,
+    config: &Config,
+    sources: &[SessionSource],
+    legacy: bool,
+) -> Result<SessionIngestReport> {
     if !config.session_ingest_enabled {
-        return Ok(0);
+        return Ok(SessionIngestReport::default());
     }
-    let mut total = digest::ingest_session_digests(store, embedder, config)?;
-    if config.session_ingest_legacy {
-        total += ingest_legacy_sessions(store, embedder, config)?;
+
+    let mut report = SessionIngestReport::default();
+    if config.session_digest_enabled {
+        report.digests_stored = if sources.is_empty() {
+            digest::ingest_session_digests(store, embedder, config)?
+        } else {
+            digest::ingest_session_digests_filtered(store, embedder, config, sources)?
+        };
     }
-    Ok(total)
+    if legacy && config.session_ingest_legacy {
+        report.legacy_stored =
+            ingest_legacy_sessions_filtered(store, embedder, config, sources)?;
+    }
+    Ok(report)
+}
+
+pub fn discover_report(config: &Config) -> Result<SessionDiscoverReport> {
+    let sessions = discover::discover_sessions(config)?;
+    let counts = discover::count_by_source(&sessions);
+    Ok(SessionDiscoverReport {
+        total: sessions.len(),
+        by_source: counts
+            .into_iter()
+            .map(|(k, v)| (k.as_str().to_string(), v))
+            .collect(),
+    })
 }
 
 pub fn ingest_legacy_sessions(
@@ -41,78 +94,47 @@ pub fn ingest_legacy_sessions(
     embedder: &Embedder,
     config: &Config,
 ) -> Result<usize> {
+    Ok(ingest_legacy_sessions_filtered(store, embedder, config, &[])?)
+}
+
+fn ingest_legacy_sessions_filtered(
+    store: &BrainStore,
+    embedder: &Embedder,
+    config: &Config,
+    sources: &[SessionSource],
+) -> Result<usize> {
     if !config.session_ingest_enabled {
         return Ok(0);
     }
 
-    let mut paths = discover_session_files(config)?;
-    paths.sort_by_key(|p| {
-        fs::metadata(p)
-            .and_then(|m| m.modified())
-            .unwrap_or(SystemTime::UNIX_EPOCH)
+    let mut sessions = discover::discover_sessions_filtered(config, sources)?;
+    sessions.retain(|s| s.jsonl_path.is_some());
+    sessions.sort_by(|a, b| {
+        modified_key(&a.jsonl_path)
+            .cmp(&modified_key(&b.jsonl_path))
+            .reverse()
     });
-    paths.reverse();
 
     let mut ingested = 0;
-    for path in paths.into_iter().take(MAX_FILES_PER_RUN) {
-        ingested += ingest_file_if_changed(store, embedder, &path)?;
+    for session in sessions.into_iter().take(MAX_FILES_PER_RUN) {
+        if let Some(path) = &session.jsonl_path {
+            ingested += ingest_legacy_file_if_changed(store, embedder, &session.source, path)?;
+        }
     }
     Ok(ingested)
 }
 
-pub(crate) fn discover_session_files(config: &Config) -> Result<Vec<PathBuf>> {
-    let mut paths = Vec::new();
-    let Some(home) = dirs::home_dir() else {
-        return Ok(paths);
-    };
-
-    let cursor_glob = format!(
-        "{}/.cursor/projects/**/agent-transcripts/**/*.jsonl",
-        home.display()
-    );
-    if let Ok(entries) = glob::glob(&cursor_glob) {
-        for entry in entries.flatten() {
-            if is_recent_enough(&entry, config.session_max_age_days) {
-                paths.push(entry);
-            }
-        }
-    }
-
-    let codex_root = home.join(".codex/sessions");
-    if codex_root.is_dir() {
-        for entry in WalkDir::new(&codex_root)
-            .into_iter()
-            .filter_map(|e| e.ok())
-            .filter(|e| e.file_type().is_file())
-        {
-            let path = entry.path().to_path_buf();
-            if path.extension().and_then(|s| s.to_str()) == Some("jsonl")
-                && is_recent_enough(&path, config.session_max_age_days)
-            {
-                paths.push(path);
-            }
-        }
-    }
-
-    Ok(paths)
+fn modified_key(path: &Option<std::path::PathBuf>) -> SystemTime {
+    path.as_ref()
+        .and_then(|p| fs::metadata(p).ok())
+        .and_then(|m| m.modified().ok())
+        .unwrap_or(SystemTime::UNIX_EPOCH)
 }
 
-fn is_recent_enough(path: &Path, max_age_days: u64) -> bool {
-    let Ok(meta) = fs::metadata(path) else {
-        return false;
-    };
-    let Ok(modified) = meta.modified() else {
-        return true;
-    };
-    let Ok(age) = SystemTime::now().duration_since(modified) else {
-        return true;
-    };
-    age.as_secs() <= max_age_days * 24 * 3600
-}
-
-fn ingest_file_if_changed(
+fn ingest_legacy_file_if_changed(
     store: &BrainStore,
     embedder: &Embedder,
+    source: &SessionSource,
     path: &Path,
 ) -> Result<usize> {
     let raw = fs::read_to_string(path)?;
@@ -123,12 +145,7 @@ fn ingest_file_if_changed(
         return Ok(0);
     }
 
-    let source_label = if path.to_string_lossy().contains(".cursor/") {
-        "cursor"
-    } else {
-        "codex"
-    };
-
+    let source_label = source.as_str();
     let mut count = 0;
     let reader = BufReader::new(raw.as_bytes());
     for (idx, line) in reader.lines().enumerate() {
@@ -136,7 +153,7 @@ fn ingest_file_if_changed(
             break;
         }
         let Ok(line) = line else { continue };
-        let Some(text) = extract_user_text(&line) else {
+        let Some(text) = parse::parse_user_line(*source, &line) else {
             continue;
         };
         if text.len() < 20 || looks_like_secret(&text) {

@@ -474,6 +474,56 @@ async fn main() -> Result<()> {
                 }
             }
         }
+        "sessions" => {
+            let sub = args.get(2).map(String::as_str).unwrap_or("help");
+            let config = Config::load()?;
+            config.ensure_dirs()?;
+            let store = agent_brain::db::store::BrainStore::open(&config.db_path)?;
+            match sub {
+                "ingest" => {
+                    let legacy = args.iter().any(|a| a == "--legacy");
+                    let sources = parse_session_sources(&args)?;
+                    let embedder = agent_brain::embed::Embedder::with_model(
+                        agent_brain::embed::parse_embedding_model(&config.embedding_model),
+                    )?;
+                    let report = agent_brain::sessions::ingest_sessions_filtered(
+                        &store,
+                        &embedder,
+                        &config,
+                        &sources,
+                        legacy,
+                    )?;
+                    if report.digests_stored > 0 || report.legacy_stored > 0 {
+                        store.bump_index_version()?;
+                    }
+                    println!(
+                        "session ingest: {} digests, {} legacy facts",
+                        report.digests_stored, report.legacy_stored
+                    );
+                }
+                "status" => {
+                    let discoverable = agent_brain::sessions::discover_report(&config)?;
+                    let stored =
+                        agent_brain::sessions::count_stored_digests_by_source(&store)?;
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "discoverable": discoverable,
+                            "stored_digests_by_source": stored,
+                            "opencode_db": agent_brain::sessions::opencode_db_path(
+                                &agent_brain::sessions::session_scan_home(&config)
+                                    .unwrap_or_else(|| config.home.clone()),
+                            ).display().to_string(),
+                        }))?
+                    );
+                }
+                _ => {
+                    eprintln!("Usage: agent-brain sessions ingest [--source cursor,codex,gemini,opencode] [--legacy]");
+                    eprintln!("       agent-brain sessions status");
+                    std::process::exit(1);
+                }
+            }
+        }
         "help" | "--help" | "-h" => {
             print_usage();
         }
@@ -492,6 +542,21 @@ fn flag_value(args: &[String], flag: &str) -> Option<String> {
         .position(|a| a == flag)
         .and_then(|idx| args.get(idx + 1))
         .cloned()
+}
+
+fn parse_session_sources(args: &[String]) -> Result<Vec<agent_brain::sessions::SessionSource>> {
+    let Some(raw) = flag_value(args, "--source") else {
+        return Ok(Vec::new());
+    };
+    let mut out = Vec::new();
+    for part in raw.split(',') {
+        let src = agent_brain::sessions::SessionSource::parse(part.trim())
+            .with_context(|| format!("unknown session source: {}", part.trim()))?;
+        if !out.contains(&src) {
+            out.push(src);
+        }
+    }
+    Ok(out)
 }
 
 fn print_usage() {
@@ -528,6 +593,8 @@ Usage:
   agent-brain inspect log [--last]            List retrieval logs (what route_task returned)
   agent-brain inspect fact <id>               Show a stored memory fact
   agent-brain inspect conflicts [--limit N]   Show topic supersession conflict log
+  agent-brain sessions ingest [--source SRCS] [--legacy]  Import session digests (cursor/codex/gemini/opencode)
+  agent-brain sessions status                 Discoverable vs stored session digests
   agent-brain --version                       Same as version (prints version only)
 
 Examples:

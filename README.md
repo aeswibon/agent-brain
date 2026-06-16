@@ -340,6 +340,27 @@ cat ~/.agent_brain/logs/last-route.md
 agent-brain briefing
 ```
 
+### Session digests (Cursor, Codex, Gemini, OpenCode)
+
+Background ingest runs during MCP bootstrap. Manual ingest:
+
+```bash
+agent-brain sessions status
+agent-brain sessions ingest
+agent-brain sessions ingest --source gemini,opencode
+```
+
+Sources scanned:
+
+| Source | Path |
+|--------|------|
+| Cursor | `~/.cursor/projects/**/agent-transcripts/**/*.jsonl` |
+| Codex | `~/.codex/sessions/**/*.jsonl` |
+| Gemini | `~/.gemini/**/transcript.jsonl` |
+| OpenCode | `~/.local/share/opencode/opencode.db` |
+
+Each session becomes one low-priority memory fact: `session-digest-{source}-{slug}`.
+
 In Cursor: **View → Output → MCP** (select `agent-brain`) for one-line stderr summaries (`latency_ms`, `cache_hit`, `briefing`).
 
 ### After a local rebuild
