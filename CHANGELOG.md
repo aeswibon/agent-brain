@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-06-16
+
+### Changed
+
+- **Dependency security patch** — upgraded `rmcp` to `1.7.0` and `lru` to `0.16.4` to resolve Dependabot alerts.
+- **rmcp compatibility** — updated non-exhaustive struct construction and upstream tool call request building for `rmcp` v1 API.
+- **README updates** — added v0.10 operator loop (`promote`, `memory gc`, `digest --weekly`, `eval --ci`) and current multi-host installer commands.
+
 ## [0.10.0] - 2026-06-16
 
 ### Added
