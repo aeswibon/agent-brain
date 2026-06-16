@@ -8,16 +8,21 @@ import time
 import unittest
 
 from route_gate import (
+    GATE_SCOPE,
+    OFFLINE_SECS,
     STALE_ROUTE_SECS,
     enter_grace,
+    enter_mcp_offline,
     handle_before_mcp_execution,
     handle_before_submit_prompt,
     handle_post_tool_use,
     handle_pre_tool_use,
     in_grace_period,
+    in_mcp_offline,
     is_route_task,
     load_state,
     route_response_useful,
+    should_gate_tool,
     stale_needs_route,
 )
 
@@ -91,12 +96,27 @@ class RouteGateTests(unittest.TestCase):
             {
                 "tool_name": "mcp_agent-brain_route_task",
                 "success": False,
-                "errorMessage": "Connection closed",
+                "errorMessage": "empty payload",
             }
         )
         state = load_state()
         self.assertFalse(state.get("needs_route"))
         self.assertTrue(in_grace_period(state))
+
+    def test_disconnect_enters_offline(self) -> None:
+        from route_gate import STATE_PATH
+
+        STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        STATE_PATH.write_text('{"needs_route": true}', encoding="utf-8")
+        handle_post_tool_use(
+            {
+                "tool_name": "mcp_agent-brain_route_task",
+                "success": False,
+                "errorMessage": "Not connected",
+            }
+        )
+        state = load_state()
+        self.assertTrue(in_mcp_offline(state))
 
     def test_grace_allows_other_tools(self) -> None:
         from route_gate import STATE_PATH
@@ -128,6 +148,56 @@ class RouteGateTests(unittest.TestCase):
         state = load_state()
         self.assertTrue(state.get("needs_route"))
         self.assertEqual(state.get("route_grace_until"), 0)
+
+    def test_scoped_gate_allows_shell_when_needs_route(self) -> None:
+        from route_gate import STATE_PATH
+
+        if GATE_SCOPE != "brain_mcp":
+            self.skipTest("scoped gate test requires brain_mcp scope")
+        STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        STATE_PATH.write_text(
+            json.dumps({"needs_route": True, "needs_route_since": time.time()}),
+            encoding="utf-8",
+        )
+        out = handle_pre_tool_use({"tool_name": "Shell"})
+        self.assertEqual(out.get("permission"), "allow")
+
+    def test_scoped_gate_blocks_brain_tools_when_needs_route(self) -> None:
+        from route_gate import STATE_PATH
+
+        if GATE_SCOPE != "brain_mcp":
+            self.skipTest("scoped gate test requires brain_mcp scope")
+        STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        STATE_PATH.write_text(
+            json.dumps({"needs_route": True, "needs_route_since": time.time()}),
+            encoding="utf-8",
+        )
+        out = handle_pre_tool_use({"tool_name": "mcp_agent-brain_store_memory"})
+        self.assertEqual(out.get("permission"), "deny")
+
+    def test_offline_skips_new_prompt_gate(self) -> None:
+        from route_gate import STATE_PATH
+
+        STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        enter_mcp_offline()
+        handle_before_submit_prompt({})
+        state = load_state()
+        self.assertFalse(state.get("needs_route"))
+        self.assertTrue(in_mcp_offline(state))
+
+    def test_offline_allows_shell(self) -> None:
+        from route_gate import STATE_PATH
+
+        STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        enter_mcp_offline({"needs_route": True, "needs_route_since": time.time()})
+        out = handle_pre_tool_use({"tool_name": "Shell"})
+        self.assertEqual(out.get("permission"), "allow")
+
+    def test_should_gate_tool_brain_mcp(self) -> None:
+        self.assertFalse(should_gate_tool({"tool_name": "Shell"}))
+        self.assertTrue(
+            should_gate_tool({"tool_name": "mcp_agent-brain_store_memory"})
+        )
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use serde_json::{json, Value};
 
-pub fn run(global: bool, print_only: bool) -> Result<()> {
+pub fn run(global: bool, print_only: bool, reload: bool) -> Result<()> {
     let exe = std::env::current_exe().context("resolve agent-brain binary path")?;
     let config_path = mcp_config_path(global)?;
     let snippet = mcp_server_entry(&exe);
@@ -18,12 +18,19 @@ pub fn run(global: bool, print_only: bool) -> Result<()> {
     println!("agent-brain MCP configured at {}", config_path.display());
     println!("Binary: {}", exe.display());
     println!();
-    println!("Next steps:");
-    println!("  1. Restart Cursor (required so MCP reloads the new binary and hooks)");
-    println!("  2. Confirm 'agent-brain' appears and is enabled under MCP");
-    println!("  3. Confirm hooks loaded under Settings → Hooks (route_task gate)");
-    println!("  4. Confirm project rule at .cursor/rules/agent-brain.mdc (Settings → Rules)");
-    println!("  5. Use Agent mode — route_task is required before other tools");
+    if reload {
+        println!("Reload nudge: refreshed mcp.json (AGENT_BRAIN_BUILD bumped).");
+        println!("Cursor may reload agent-brain automatically; if not, toggle it under Settings → MCP.");
+    } else {
+        println!("Next steps:");
+        println!("  1. Restart Cursor or toggle agent-brain under Settings → MCP (loads new binary + hooks)");
+        println!("  2. Confirm 'agent-brain' appears and is enabled under MCP");
+        println!("  3. Confirm hooks loaded under Settings → Hooks (route_task gate)");
+        println!("  4. Confirm project rule at .cursor/rules/agent-brain.mdc (Settings → Rules)");
+        println!("  5. Use Agent mode — route_task is required before other agent-brain MCP tools");
+        println!();
+        println!("After local rebuilds without full reinstall: agent-brain install --global --reload");
+    }
     Ok(())
 }
 
@@ -223,6 +230,11 @@ fn mcp_config_path(global: bool) -> Result<PathBuf> {
 }
 
 fn mcp_server_entry(exe: &Path) -> Value {
+    let build_id = format!(
+        "{}@{}",
+        env!("CARGO_PKG_VERSION"),
+        chrono::Utc::now().timestamp()
+    );
     json!({
         "command": exe.display().to_string(),
         "args": ["serve"],
@@ -232,7 +244,8 @@ fn mcp_server_entry(exe: &Path) -> Value {
             "AGENT_BRAIN_BOOTSTRAP_DELAY_SEC": "2",
             "AGENT_BRAIN_BOOTSTRAP_INTERVAL_SEC": "3600",
             "AGENT_BRAIN_AUTO_UPDATE_DELAY_SEC": "60",
-            "AGENT_BRAIN_SESSION_INGEST_DELAY_SEC": "180"
+            "AGENT_BRAIN_SESSION_INGEST_DELAY_SEC": "180",
+            "AGENT_BRAIN_BUILD": build_id
         }
     })
 }

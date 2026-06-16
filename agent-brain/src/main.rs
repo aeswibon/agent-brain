@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
-use agent_brain::{auto_update, config::Config, doctor, engine::Engine, install, mcp, packages, settings};
+use agent_brain::{
+    auto_update, config::Config, doctor, engine::Engine, install, mcp, packages, serve_meta,
+    settings,
+};
 use anyhow::{Context, Result};
 use tracing_subscriber::EnvFilter;
 
@@ -33,6 +36,9 @@ async fn main() -> Result<()> {
             }
             if brain_settings.auto_update.enabled {
                 engine.spawn_auto_update();
+            }
+            if let Err(err) = serve_meta::write_current(&engine.config.home) {
+                tracing::warn!(error = %err, "write serve_meta.json failed");
             }
             mcp::run_stdio(engine).await?;
         }
@@ -111,8 +117,9 @@ async fn main() -> Result<()> {
         }
         "install" => {
             let global = args.iter().any(|a| a == "--global");
+            let reload = args.iter().any(|a| a == "--reload");
             let print_only = args.iter().any(|a| a == "--print-only");
-            install::run(global, print_only)?;
+            install::run(global || reload, print_only, reload)?;
             if global && !print_only {
                 let config = Config::load()?;
                 if settings::config_path_optional(&config.home).is_none() {
@@ -508,7 +515,7 @@ Usage:
   agent-brain package list                  List installed packages
   agent-brain package update [name]         Update one or all packages
   agent-brain package remove <name>         Remove an installed package
-  agent-brain install [--global]              Write Cursor MCP config for this binary
+  agent-brain install [--global] [--reload]     Write Cursor MCP config for this binary
   agent-brain update [--force] [--mcp-only]     Run auto-update (MCP checks GitHub tag; packages use 24h interval unless --force)
   agent-brain config init                     Write ~/.agent_brain/config.yaml defaults
   agent-brain config show                     Print active config file

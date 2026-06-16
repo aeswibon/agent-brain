@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-06-16
+
+### Added
+
+- **Scoped route gate** — default `AGENT_BRAIN_ROUTE_GATE_SCOPE=brain_mcp` gates only agent-brain MCP tools; Shell/Read/Grep keep working when MCP is down (`all` restores legacy strict mode).
+- **MCP offline mode** — disconnect failures set `mcp_offline_until` (default 30m, `AGENT_BRAIN_ROUTE_OFFLINE_SECS`); hooks stop hard-locking the session until `route_task` succeeds again.
+- **`install --reload`** — bumps `AGENT_BRAIN_BUILD` in `mcp.json` to nudge Cursor to reload agent-brain without a full reinstall.
+- **`serve_meta.json`** — written on `serve` start; **`doctor`** reports running vs on-disk version and flags stale serve.
+
+### Changed
+
+- Route gate clears offline state on successful `route_task`.
+- `doctor --fix` runs `install --global --reload` when serve is stale.
+
 ## [0.7.0] - 2026-06-16
 
 ### Added

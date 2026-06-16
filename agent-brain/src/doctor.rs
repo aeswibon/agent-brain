@@ -75,7 +75,7 @@ pub fn run(fix: bool) -> Result<()> {
     }
 
     let mut sign_targets = vec![exe.clone()];
-    if let Some(cmd) = mcp_binary {
+    if let Some(cmd) = mcp_binary.clone() {
         if !paths_same(&exe, &cmd) {
             sign_targets.push(cmd);
         }
@@ -129,9 +129,38 @@ pub fn run(fix: bool) -> Result<()> {
         println!("  last route briefing:   not yet (appears after first route_task)");
     }
 
+    let serve = crate::serve_meta::assess(&config.home, mcp_binary.as_deref());
+    if let Some(meta) = &serve.meta {
+        let alive = if serve.process_alive { "running" } else { "not running" };
+        println!(
+            "  last serve:            v{} pid {} ({})",
+            meta.version, meta.pid, alive
+        );
+    } else {
+        println!("  last serve:            unknown (starts after next MCP connect)");
+    }
+    if let Some(disk) = &serve.disk_version {
+        println!("  binary on disk:        {disk}");
+    }
+    if serve.stale {
+        println!("  serve stale:           YES — running process is older than binary on disk");
+        ok = false;
+        if fix {
+            println!("  fixing:                agent-brain install --global --reload");
+            crate::install::configure_cursor(true, &exe, false)?;
+            println!("  reload nudge:          mcp.json refreshed (toggle MCP if still stale)");
+        } else {
+            println!("                         run: agent-brain install --global --reload");
+            println!("                         or toggle agent-brain under Settings → MCP");
+        }
+    } else if serve.meta.is_some() && serve.process_alive {
+        println!("  serve stale:           no");
+    }
+
     println!();
     println!("Tips:");
     println!("  • agent-brain briefing — readable route without expanding MCP JSON");
+    println!("  • Background auto-update during serve can exec a new binary after idle (see config auto_update.mcp.restart_after_update)");
     println!("  • macOS: linker-signed binaries are killed by taskgated — doctor --fix adhoc re-signs");
     println!("  • spctl may reject adhoc local builds; that is OK if codesign shows adhoc, not linker-signed");
 

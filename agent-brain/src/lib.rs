@@ -4,6 +4,7 @@ pub mod cache;
 pub mod config;
 pub mod db;
 pub mod doctor;
+pub mod serve_meta;
 pub mod embed;
 pub mod engine;
 pub mod index;
