@@ -187,6 +187,67 @@ fn memory_gc_archives_stale_session_digest() {
     let applied = run_memory_gc(&store, false, false).unwrap();
     assert_eq!(applied.archived, 1);
     assert!(store.get_fact(&stored.id).unwrap().is_none());
+    assert!(
+        applied
+            .reason_buckets
+            .iter()
+            .any(|b| b.reason == "archive:stale_session_digest" && b.count >= 1),
+        "{:?}",
+        applied.reason_buckets
+    );
+    assert!(
+        applied
+            .top_topics
+            .iter()
+            .any(|t| t.topic == "session-digest-cursor-old"),
+        "{:?}",
+        applied.top_topics
+    );
+}
+
+#[test]
+fn memory_gc_report_buckets_protected_negative() {
+    let dir = TempDir::new().unwrap();
+    let config = test_config(&dir);
+    config.ensure_dirs().unwrap();
+    let store = BrainStore::open(&config.db_path).unwrap();
+    let text = "Never commit secrets to git";
+    let emb = deterministic_embedding(text);
+    let stored = store
+        .store_fact(
+            "secrets",
+            text,
+            "global",
+            None,
+            0.9,
+            "agent",
+            &content_hash(text),
+            &emb,
+            "negative",
+        )
+        .unwrap();
+    store
+        .record_context_feedback(&[stored.id.clone()], false)
+        .unwrap();
+    for _ in 0..8 {
+        store
+            .record_context_feedback(&[stored.id.clone()], false)
+            .unwrap();
+    }
+    let old = chrono::Utc::now().timestamp_millis() - 100_i64 * 24 * 3600 * 1000;
+    store
+        .set_context_last_used_for_test(&stored.id, old)
+        .unwrap();
+
+    let report = run_memory_gc(&store, true, false).unwrap();
+    assert!(
+        report
+            .reason_buckets
+            .iter()
+            .any(|b| b.reason == "protected:negative" && b.count >= 1),
+        "{:?}",
+        report.reason_buckets
+    );
 }
 
 #[test]

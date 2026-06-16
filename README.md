@@ -238,7 +238,7 @@ agent-brain promote approve <staging-id>
 agent-brain promote reject <staging-id>
 
 # 2) Memory garbage collection (dry-run by default)
-agent-brain memory gc
+agent-brain memory gc          # JSON report: reason_buckets, top_topics
 agent-brain memory gc --apply
 
 # 3) Weekly operator digest from retrieval logs

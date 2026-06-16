@@ -899,6 +899,17 @@ impl BrainStore {
         })
     }
 
+    /// Test helper: backdate context feedback for low-signal GC eligibility.
+    pub fn set_context_last_used_for_test(&self, item_id: &str, last_used_at: i64) -> Result<()> {
+        self.with_conn(|conn| {
+            conn.execute(
+                "UPDATE context_weights SET last_used_at = ?1 WHERE item_id = ?2",
+                params![last_used_at, item_id],
+            )?;
+            Ok(())
+        })
+    }
+
     pub fn get_fact(&self, id: &str) -> Result<Option<serde_json::Value>> {
         self.with_conn(|conn| {
             conn.query_row(
@@ -1184,7 +1195,14 @@ impl BrainStore {
         let very_stale_cutoff = now_ms - very_stale_ms;
         self.with_conn(|conn| {
             let mut stmt = conn.prepare(
-                r#"SELECT f.id, f.topic, f.fact, f.scope, f.scope_key, f.source, f.confidence, f.polarity, f.apply_when
+                r#"SELECT f.id, f.topic, f.fact, f.scope, f.scope_key, f.source, f.confidence, f.polarity, f.apply_when,
+                          CASE
+                            WHEN cw.weight IS NOT NULL AND cw.weight < 0.6 AND cw.useless_count > cw.useful_count
+                                 AND IFNULL(cw.last_used_at, 0) < ?1 THEN 'low_signal'
+                            WHEN cw.item_id IS NULL AND f.source IN ('session_digest', 'legacy', 'legacy_cursor')
+                                 AND f.updated_at < ?2 THEN 'stale_session_digest'
+                            ELSE 'unknown'
+                          END AS gc_kind
                    FROM facts f
                    LEFT JOIN context_weights cw ON cw.item_id = f.id
                    WHERE f.superseded_by IS NULL
@@ -1207,6 +1225,7 @@ impl BrainStore {
                         confidence: row.get(6)?,
                         polarity: row.get(7)?,
                         apply_when: row.get(8)?,
+                        gc_kind: row.get(9)?,
                     })
                 })?
                 .collect::<Result<Vec<_>, _>>()?;
@@ -1768,6 +1787,7 @@ pub struct GcCandidate {
     pub confidence: f64,
     pub polarity: Option<String>,
     pub apply_when: Option<String>,
+    pub gc_kind: String,
 }
 
 #[derive(Debug, Clone)]

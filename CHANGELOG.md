@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-06-16
+
+### Added
+
+- **Memory GC reporting** — `agent-brain memory gc` JSON now includes `reason_buckets` (archive vs protected breakdown) and `top_topics` (most frequent candidate topics).
+- **Configurable GC thresholds** — `--stale-days` / `--very-stale-days` CLI flags and `memory_gc` block in `~/.agent_brain/config.yaml`.
+
+### Changed
+
+- **Integration tests** — `Engine::new_with_store` uses deterministic embeddings to avoid fastembed ONNX lock contention in parallel `cargo test`.
+
+### Fixed
+
+- **CI flake** — parallel test runs no longer contend on fastembed model cache locks.
+
 ## [0.10.1] - 2026-06-16
 
 ### Changed
