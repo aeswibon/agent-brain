@@ -163,6 +163,16 @@ fn default_upstream_tokens() -> usize {
     500
 }
 
+#[derive(Debug, Deserialize, JsonSchema)]
+struct PromoteToSkillParams {
+    #[serde(default)]
+    fact_id: Option<String>,
+    #[serde(default)]
+    topic: Option<String>,
+    #[serde(default)]
+    skill_name: Option<String>,
+}
+
 #[tool_router]
 impl BrainMcp {
     #[tool(description = "REQUIRED every turn before planning or edits. Returns ranked agents, skills, rules, and memory under a token budget. Pass user_message, current_working_directory, and open_files.")]
@@ -431,6 +441,36 @@ impl BrainMcp {
             "tokens_used": truncated.tokens_used,
             "tokens_budget": truncated.tokens_budget,
             "content": truncated.content,
+        }))
+    }
+
+    #[tool(description = "Stage a SKILL.md draft from a memory fact. Requires human approve via agent-brain promote approve.")]
+    async fn promote_to_skill(
+        &self,
+        params: Parameters<PromoteToSkillParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let _req = self.engine.mcp_activity.begin_request();
+        let p = params.0;
+        if p.fact_id.is_none() && p.topic.is_none() {
+            return Err(McpError::invalid_params(
+                "fact_id or topic is required",
+                None,
+            ));
+        }
+        let result = crate::promote::promote_fact_to_skill(
+            &self.engine.store,
+            &self.engine.config.home,
+            p.fact_id.as_deref(),
+            p.topic.as_deref(),
+            p.skill_name.as_deref(),
+        )
+        .map_err(|e| McpError::internal_error(format!("{e}"), None))?;
+        json_result(serde_json::json!({
+            "staging_id": result.staging_id,
+            "skill_name": result.skill_name,
+            "draft_path": result.draft_path,
+            "status": result.status,
+            "next": "Run: agent-brain promote approve <staging_id>"
         }))
     }
 }

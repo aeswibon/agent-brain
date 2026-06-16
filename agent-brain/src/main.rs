@@ -527,6 +527,89 @@ async fn main() -> Result<()> {
                 }
             }
         }
+        "promote" => {
+            let config = Config::load()?;
+            config.ensure_dirs()?;
+            let store = agent_brain::db::store::BrainStore::open(&config.db_path)?;
+            let sub = args.get(2).map(String::as_str).unwrap_or("help");
+            match sub {
+                "list" => {
+                    let status = flag_value(&args, "--status");
+                    let rows = agent_brain::promote::list_staging(&store, status.as_deref())?;
+                    println!("{}", serde_json::to_string_pretty(&rows)?);
+                }
+                "approve" => {
+                    let id = args
+                        .get(3)
+                        .context("usage: agent-brain promote approve <staging-id>")?;
+                    let path = agent_brain::promote::approve_staging(&store, id)?;
+                    let engine = Arc::new(Engine::new(config)?);
+                    let n = engine.bootstrap(None)?;
+                    println!("Approved skill at {}", path.display());
+                    println!("Reindexed {n} items");
+                }
+                "reject" => {
+                    let id = args
+                        .get(3)
+                        .context("usage: agent-brain promote reject <staging-id>")?;
+                    agent_brain::promote::reject_staging(&store, id)?;
+                    println!("Rejected staging {id}");
+                }
+                _ => {
+                    eprintln!("Usage: agent-brain promote list [--status pending|approved|rejected]");
+                    eprintln!("       agent-brain promote approve <staging-id>");
+                    eprintln!("       agent-brain promote reject <staging-id>");
+                    std::process::exit(1);
+                }
+            }
+        }
+        "memory" => {
+            let config = Config::load()?;
+            config.ensure_dirs()?;
+            let store = agent_brain::db::store::BrainStore::open(&config.db_path)?;
+            let sub = args.get(2).map(String::as_str).unwrap_or("help");
+            match sub {
+                "gc" => {
+                    let dry_run = !args.iter().any(|a| a == "--apply");
+                    let force = args.iter().any(|a| a == "--force");
+                    let report = agent_brain::memory_gc::run_memory_gc(&store, dry_run, force)?;
+                    println!("{}", serde_json::to_string_pretty(&report)?);
+                    if dry_run && !report.ids.is_empty() {
+                        eprintln!("Dry run — re-run with --apply to archive.");
+                    }
+                }
+                _ => {
+                    eprintln!("Usage: agent-brain memory gc [--apply] [--force]");
+                    std::process::exit(1);
+                }
+            }
+        }
+        "digest" => {
+            if !args.iter().any(|a| a == "--weekly") {
+                eprintln!("Usage: agent-brain digest --weekly");
+                std::process::exit(1);
+            }
+            let config = Config::load()?;
+            let store = agent_brain::db::store::BrainStore::open(&config.db_path)?;
+            let digest = agent_brain::operator_digest::weekly_digest(&store, 7)?;
+            println!("{}", agent_brain::operator_digest::format_weekly_digest(&digest));
+        }
+        "eval" => {
+            if !args.iter().any(|a| a == "--ci") {
+                eprintln!("Usage: agent-brain eval --ci");
+                std::process::exit(1);
+            }
+            let mut config = Config::load()?;
+            config.bootstrap_background = false;
+            config.session_ingest_background = false;
+            let engine = Arc::new(Engine::new(config)?);
+            let report = agent_brain::eval::run_ci_eval(&engine)?;
+            println!("{}", serde_json::to_string_pretty(&report)?);
+            if let Err(err) = agent_brain::eval::assert_ci_gate(&report) {
+                eprintln!("{err}");
+                std::process::exit(1);
+            }
+        }
         "help" | "--help" | "-h" => {
             print_usage();
         }
@@ -603,6 +686,10 @@ Usage:
   agent-brain inspect conflicts [--limit N]   Show topic supersession conflict log
   agent-brain sessions ingest [--source SRCS] [--legacy]  Import session digests (cursor/codex/gemini/opencode)
   agent-brain sessions status                 Discoverable vs stored session digests
+  agent-brain promote list|approve|reject     Skill promotion workflow (human approval required)
+  agent-brain memory gc [--apply] [--force]   Archive stale facts (dry-run by default)
+  agent-brain digest --weekly                 Operator digest from retrieval_log
+  agent-brain eval --ci                       Recall@3 CI gate (threshold 0.85)
   agent-brain --version                       Same as version (prints version only)
 
 Examples:

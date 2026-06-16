@@ -23,5 +23,9 @@ pub mod tokens;
 pub mod types;
 pub mod upstream;
 pub mod workspace;
+pub mod promote;
+pub mod memory_gc;
+pub mod operator_digest;
+pub mod eval;
 
 pub use engine::Engine;

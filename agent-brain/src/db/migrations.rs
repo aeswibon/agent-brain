@@ -137,6 +137,15 @@ pub fn run(conn: &Connection) -> rusqlite::Result<()> {
         conn.execute("UPDATE schema_version SET version = 5", [])?;
     }
 
+    let version: i64 = conn
+        .query_row("SELECT version FROM schema_version LIMIT 1", [], |r| r.get(0))
+        .unwrap_or(0);
+
+    if version < 6 {
+        migrate_v6(conn)?;
+        conn.execute("UPDATE schema_version SET version = 6", [])?;
+    }
+
     Ok(())
 }
 
@@ -224,6 +233,40 @@ fn migrate_v5(conn: &Connection) -> rusqlite::Result<()> {
             name TEXT PRIMARY KEY,
             used_by TEXT NOT NULL,
             created_at INTEGER NOT NULL
+        );
+        "#,
+    )?;
+    Ok(())
+}
+
+fn migrate_v6(conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS skill_staging (
+            id TEXT PRIMARY KEY,
+            fact_id TEXT NOT NULL,
+            topic TEXT NOT NULL,
+            skill_name TEXT NOT NULL,
+            draft_path TEXT NOT NULL,
+            target_path TEXT,
+            status TEXT NOT NULL DEFAULT 'pending',
+            created_at INTEGER NOT NULL,
+            resolved_at INTEGER
+        );
+
+        CREATE TABLE IF NOT EXISTS facts_archive (
+            id TEXT PRIMARY KEY,
+            original_id TEXT NOT NULL,
+            topic TEXT NOT NULL,
+            fact TEXT NOT NULL,
+            scope TEXT NOT NULL,
+            scope_key TEXT,
+            source TEXT NOT NULL,
+            confidence REAL,
+            polarity TEXT,
+            apply_when TEXT,
+            archived_at INTEGER NOT NULL,
+            archive_reason TEXT NOT NULL
         );
         "#,
     )?;

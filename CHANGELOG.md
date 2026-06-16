@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-06-16
+
+### Added
+
+- **`promote_to_skill` MCP tool** — stages SKILL.md drafts from memory facts under `~/.agent_brain/staging/`.
+- **`agent-brain promote list|approve|reject`** — human approval gate before skills land in `.cursor/skills/`.
+- **Memory GC** — `agent-brain memory gc [--apply] [--force]` archives stale facts to `facts_archive` using `context_weights`; protects negative/`apply_when`/high-confidence user facts unless `--force`.
+- **Operator digest** — `agent-brain digest --weekly` summarizes retrieval_log and context feedback for the past 7 days.
+- **Eval CI gate** — `agent-brain eval --ci` runs golden Recall@3 eval (threshold ≥ 0.85).
+- **Schema v6** — `skill_staging` and `facts_archive` tables.
+
 ## [0.9.1] - 2026-06-16
 
 ### Added

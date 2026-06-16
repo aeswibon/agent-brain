@@ -888,6 +888,17 @@ impl BrainStore {
         Ok(warnings)
     }
 
+    /// Test helper: backdate a fact for GC eligibility checks.
+    pub fn set_fact_updated_at_for_test(&self, id: &str, updated_at: i64) -> Result<()> {
+        self.with_conn(|conn| {
+            conn.execute(
+                "UPDATE facts SET updated_at = ?1 WHERE id = ?2",
+                params![updated_at, id],
+            )?;
+            Ok(())
+        })
+    }
+
     pub fn get_fact(&self, id: &str) -> Result<Option<serde_json::Value>> {
         self.with_conn(|conn| {
             conn.query_row(
@@ -1090,6 +1101,253 @@ impl BrainStore {
                 |r| r.get(0),
             )?;
             Ok(count as usize)
+        })
+    }
+
+    pub fn insert_skill_staging(
+        &self,
+        id: &str,
+        fact_id: &str,
+        topic: &str,
+        skill_name: &str,
+        draft_path: &str,
+        target_path: Option<&str>,
+    ) -> Result<()> {
+        let now = chrono::Utc::now().timestamp_millis();
+        self.with_conn(|conn| {
+            conn.execute(
+                r#"INSERT INTO skill_staging (id, fact_id, topic, skill_name, draft_path, target_path, status, created_at)
+                   VALUES (?1,?2,?3,?4,?5,?6,'pending',?7)"#,
+                params![id, fact_id, topic, skill_name, draft_path, target_path, now],
+            )?;
+            Ok(())
+        })
+    }
+
+    pub fn list_skill_staging(&self, status: Option<&str>) -> Result<Vec<SkillStagingRow>> {
+        self.with_conn(|conn| {
+            let mut rows = Vec::new();
+            if let Some(status) = status {
+                let mut stmt = conn.prepare(
+                    "SELECT id, fact_id, topic, skill_name, draft_path, target_path, status, created_at, resolved_at
+                     FROM skill_staging WHERE status = ?1 ORDER BY created_at DESC",
+                )?;
+                let mapped = stmt.query_map(params![status], map_skill_staging_row)?;
+                for row in mapped {
+                    rows.push(row?);
+                }
+            } else {
+                let mut stmt = conn.prepare(
+                    "SELECT id, fact_id, topic, skill_name, draft_path, target_path, status, created_at, resolved_at
+                     FROM skill_staging ORDER BY created_at DESC",
+                )?;
+                let mapped = stmt.query_map([], map_skill_staging_row)?;
+                for row in mapped {
+                    rows.push(row?);
+                }
+            }
+            Ok(rows)
+        })
+    }
+
+    pub fn get_skill_staging(&self, id: &str) -> Result<Option<SkillStagingRow>> {
+        self.with_conn(|conn| {
+            conn.query_row(
+                "SELECT id, fact_id, topic, skill_name, draft_path, target_path, status, created_at, resolved_at
+                 FROM skill_staging WHERE id = ?1",
+                params![id],
+                map_skill_staging_row,
+            )
+            .optional()
+            .map_err(Into::into)
+        })
+    }
+
+    pub fn resolve_skill_staging(&self, id: &str, status: &str) -> Result<()> {
+        let now = chrono::Utc::now().timestamp_millis();
+        self.with_conn(|conn| {
+            conn.execute(
+                "UPDATE skill_staging SET status = ?1, resolved_at = ?2 WHERE id = ?3",
+                params![status, now, id],
+            )?;
+            Ok(())
+        })
+    }
+
+    pub fn list_gc_candidates(
+        &self,
+        now_ms: i64,
+        stale_ms: i64,
+        very_stale_ms: i64,
+    ) -> Result<Vec<GcCandidate>> {
+        let stale_cutoff = now_ms - stale_ms;
+        let very_stale_cutoff = now_ms - very_stale_ms;
+        self.with_conn(|conn| {
+            let mut stmt = conn.prepare(
+                r#"SELECT f.id, f.topic, f.fact, f.scope, f.scope_key, f.source, f.confidence, f.polarity, f.apply_when
+                   FROM facts f
+                   LEFT JOIN context_weights cw ON cw.item_id = f.id
+                   WHERE f.superseded_by IS NULL
+                     AND (
+                       (cw.weight IS NOT NULL AND cw.weight < 0.6 AND cw.useless_count > cw.useful_count
+                        AND IFNULL(cw.last_used_at, 0) < ?1)
+                       OR (cw.item_id IS NULL AND f.source IN ('session_digest', 'legacy', 'legacy_cursor')
+                           AND f.updated_at < ?2)
+                     )"#,
+            )?;
+            let rows = stmt
+                .query_map(params![stale_cutoff, very_stale_cutoff], |row| {
+                    Ok(GcCandidate {
+                        id: row.get(0)?,
+                        topic: row.get(1)?,
+                        fact: row.get(2)?,
+                        scope: row.get(3)?,
+                        scope_key: row.get(4)?,
+                        source: row.get(5)?,
+                        confidence: row.get(6)?,
+                        polarity: row.get(7)?,
+                        apply_when: row.get(8)?,
+                    })
+                })?
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(rows)
+        })
+    }
+
+    pub fn archive_fact(&self, candidate: &GcCandidate, reason: &str) -> Result<()> {
+        let now = chrono::Utc::now().timestamp_millis();
+        let archive_id = Uuid::new_v4().to_string();
+        self.with_conn(|conn| {
+            conn.execute(
+                r#"INSERT INTO facts_archive (id, original_id, topic, fact, scope, scope_key, source, confidence, polarity, apply_when, archived_at, archive_reason)
+                   VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)"#,
+                params![
+                    archive_id,
+                    candidate.id,
+                    candidate.topic,
+                    candidate.fact,
+                    candidate.scope,
+                    candidate.scope_key,
+                    candidate.source,
+                    candidate.confidence,
+                    candidate.polarity,
+                    candidate.apply_when,
+                    now,
+                    reason
+                ],
+            )?;
+            conn.execute("DELETE FROM facts WHERE id = ?1", params![candidate.id])?;
+            conn.execute(
+                "DELETE FROM indexed_items WHERE item_type = 'memory' AND topic = ?1 AND scope = ?2 AND IFNULL(scope_key,'') = IFNULL(?3,'')",
+                params![candidate.topic, candidate.scope, candidate.scope_key],
+            )?;
+            conn.execute(
+                "DELETE FROM context_weights WHERE item_id = ?1",
+                params![candidate.id],
+            )?;
+            Ok(())
+        })?;
+        self.invalidate_search_cache();
+        Ok(())
+    }
+
+    pub fn retrieval_stats_since(&self, since_ms: i64) -> Result<RetrievalStats> {
+        self.with_conn(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT phase, cache_hit, latency_ms FROM retrieval_log WHERE timestamp >= ?1",
+            )?;
+            let rows = stmt
+                .query_map(params![since_ms], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, i64>(1)? != 0,
+                        row.get::<_, u64>(2)?,
+                    ))
+                })?
+                .collect::<Result<Vec<_>, _>>()?;
+
+            let mut route_calls = 0usize;
+            let mut upstream_calls = 0usize;
+            let mut cache_hits = 0usize;
+            let mut latencies = Vec::new();
+            let mut phase_counts: HashMap<String, usize> = HashMap::new();
+
+            for (phase, cache_hit, latency) in rows {
+                if phase == "upstream_call" {
+                    upstream_calls += 1;
+                } else {
+                    route_calls += 1;
+                }
+                if cache_hit {
+                    cache_hits += 1;
+                }
+                latencies.push(latency);
+                *phase_counts.entry(phase).or_default() += 1;
+            }
+
+            let total = route_calls + upstream_calls;
+            let cache_hit_rate = if total == 0 {
+                0.0
+            } else {
+                cache_hits as f64 / total as f64
+            };
+            let avg_latency_ms = if latencies.is_empty() {
+                0.0
+            } else {
+                latencies.iter().sum::<u64>() as f64 / latencies.len() as f64
+            };
+            latencies.sort_unstable();
+            let p95_latency_ms = if latencies.is_empty() {
+                0
+            } else {
+                let idx = ((latencies.len() as f64 * 0.95).ceil() as usize)
+                    .saturating_sub(1)
+                    .min(latencies.len() - 1);
+                latencies[idx]
+            };
+
+            let mut phases: Vec<(String, usize)> = phase_counts.into_iter().collect();
+            phases.sort_by(|a, b| b.1.cmp(&a.1));
+
+            Ok(RetrievalStats {
+                route_calls,
+                upstream_calls,
+                cache_hit_rate,
+                avg_latency_ms,
+                p95_latency_ms,
+                phases,
+            })
+        })
+    }
+
+    pub fn context_feedback_summary(&self, lowest_n: usize) -> Result<ContextFeedbackSummary> {
+        self.with_conn(|conn| {
+            let (items_tracked, total_useful, total_useless): (i64, i64, i64) = conn.query_row(
+                "SELECT COUNT(*), COALESCE(SUM(useful_count),0), COALESCE(SUM(useless_count),0) FROM context_weights",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )?;
+
+            let mut stmt = conn.prepare(
+                "SELECT item_id, weight, useful_count, useless_count FROM context_weights ORDER BY weight ASC LIMIT ?1",
+            )?;
+            let lowest_weight = stmt
+                .query_map(params![lowest_n as i64], |row| {
+                    Ok(WeightSnapshot {
+                        item_id: row.get(0)?,
+                        weight: row.get(1)?,
+                        useful_count: row.get(2)?,
+                        useless_count: row.get(3)?,
+                    })
+                })?
+                .collect::<Result<Vec<_>, _>>()?;
+
+            Ok(ContextFeedbackSummary {
+                items_tracked: items_tracked as usize,
+                total_useful,
+                total_useless,
+                lowest_weight,
+            })
         })
     }
 
@@ -1486,6 +1744,58 @@ pub struct ActiveFactSnapshot {
     pub updated_at: i64,
 }
 
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct SkillStagingRow {
+    pub id: String,
+    pub fact_id: String,
+    pub topic: String,
+    pub skill_name: String,
+    pub draft_path: String,
+    pub target_path: Option<String>,
+    pub status: String,
+    pub created_at: i64,
+    pub resolved_at: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct GcCandidate {
+    pub id: String,
+    pub topic: String,
+    pub fact: String,
+    pub scope: String,
+    pub scope_key: Option<String>,
+    pub source: Option<String>,
+    pub confidence: f64,
+    pub polarity: Option<String>,
+    pub apply_when: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct RetrievalStats {
+    pub route_calls: usize,
+    pub upstream_calls: usize,
+    pub cache_hit_rate: f64,
+    pub avg_latency_ms: f64,
+    pub p95_latency_ms: u64,
+    pub phases: Vec<(String, usize)>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ContextFeedbackSummary {
+    pub items_tracked: usize,
+    pub total_useful: i64,
+    pub total_useless: i64,
+    pub lowest_weight: Vec<WeightSnapshot>,
+}
+
+#[derive(Debug, Clone)]
+pub struct WeightSnapshot {
+    pub item_id: String,
+    pub weight: f64,
+    pub useful_count: i64,
+    pub useless_count: i64,
+}
+
 pub struct ConflictSnapshot {
     pub id: String,
     pub topic: String,
@@ -1558,6 +1868,20 @@ pub fn normalize_fact(text: &str) -> String {
 pub fn content_hash(text: &str) -> String {
     use sha2::{Digest, Sha256};
     format!("{:x}", Sha256::digest(normalize_fact(text).as_bytes()))
+}
+
+fn map_skill_staging_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<SkillStagingRow> {
+    Ok(SkillStagingRow {
+        id: row.get(0)?,
+        fact_id: row.get(1)?,
+        topic: row.get(2)?,
+        skill_name: row.get(3)?,
+        draft_path: row.get(4)?,
+        target_path: row.get(5)?,
+        status: row.get(6)?,
+        created_at: row.get(7)?,
+        resolved_at: row.get(8)?,
+    })
 }
 
 pub fn word_count(text: &str) -> usize {
