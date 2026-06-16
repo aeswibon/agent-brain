@@ -149,6 +149,20 @@ fn default_merge_policy() -> String {
     "newer_wins".into()
 }
 
+#[derive(Debug, Deserialize, JsonSchema)]
+struct RouteToMcpParams {
+    server: String,
+    tool: String,
+    #[serde(default)]
+    arguments: serde_json::Value,
+    #[serde(default = "default_upstream_tokens")]
+    max_tokens: usize,
+}
+
+fn default_upstream_tokens() -> usize {
+    500
+}
+
 #[tool_router]
 impl BrainMcp {
     #[tool(description = "REQUIRED every turn before planning or edits. Returns ranked agents, skills, rules, and memory under a token budget. Pass user_message, current_working_directory, and open_files.")]
@@ -361,6 +375,63 @@ impl BrainMcp {
             .map_err(|e| McpError::internal_error(format!("{e}"), None))?;
         self.engine.cache.clear();
         json_result(report)
+    }
+
+    #[tool(description = "Call a configured upstream MCP tool. Response is semantically truncated to max_tokens. Agent must call explicitly; router never auto-executes upstream tools.")]
+    async fn route_to_mcp(
+        &self,
+        params: Parameters<RouteToMcpParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let started = std::time::Instant::now();
+        let _req = self.engine.mcp_activity.begin_request();
+        let p = params.0;
+        let settings = crate::settings::AgentBrainSettings::load(&self.engine.config.home);
+        let server = crate::upstream::find_server(&settings.upstream_mcp, &p.server).ok_or_else(|| {
+            McpError::invalid_params(
+                format!("unknown or disabled upstream server: {}", p.server),
+                None,
+            )
+        })?;
+        let arguments = if p.arguments.is_null() {
+            serde_json::json!({})
+        } else {
+            p.arguments
+        };
+        let result = crate::upstream::call_upstream_tool(server, &p.tool, arguments)
+            .await
+            .map_err(|e| McpError::internal_error(format!("{e}"), None))?;
+        let is_error = result.is_error.unwrap_or(false);
+        let (raw, structured) = crate::upstream::call_tool_result_to_text(&result);
+        let truncated = crate::upstream::truncate_upstream_result(
+            &raw,
+            structured.as_ref(),
+            p.max_tokens,
+        )
+        .map_err(|e| McpError::internal_error(format!("{e}"), None))?;
+        let log_id = uuid::Uuid::new_v4().to_string();
+        let latency_ms = started.elapsed().as_millis() as u64;
+        if let Err(err) = crate::observability::log_upstream_call(
+            &self.engine.store,
+            &log_id,
+            &server.name,
+            &p.tool,
+            truncated.tokens_used,
+            truncated.truncated,
+            is_error,
+            latency_ms,
+        ) {
+            tracing::warn!(error = %err, "upstream retrieval log write failed");
+        }
+        json_result(serde_json::json!({
+            "log_id": log_id,
+            "server": server.name,
+            "tool": p.tool,
+            "is_error": is_error,
+            "truncated": truncated.truncated,
+            "tokens_used": truncated.tokens_used,
+            "tokens_budget": truncated.tokens_budget,
+            "content": truncated.content,
+        }))
     }
 }
 

@@ -139,6 +139,17 @@ impl Engine {
                 tracing::warn!(error = %err, "bootstrap prewarm failed");
             }
         }
+        let settings = crate::settings::AgentBrainSettings::load(&self.config.home);
+        if settings.upstream_mcp.enabled {
+            match crate::upstream::refresh_upstream_index_blocking(&settings.upstream_mcp, &self.store)
+            {
+                Ok(count) if count > 0 => {
+                    tracing::info!(count, "upstream MCP tools indexed");
+                }
+                Ok(_) => {}
+                Err(err) => tracing::warn!(error = %err, "upstream MCP index refresh failed"),
+            }
+        }
         let now = chrono::Utc::now().timestamp().to_string();
         if let Err(err) = self.store.set_meta("last_bootstrap_unix", &now) {
             tracing::warn!(error = %err, "record last_bootstrap_unix failed");
@@ -435,6 +446,13 @@ impl Engine {
 
         let build_started = Instant::now();
         let mut resp = build_route_response(&scored, &limits, &phase, max_tokens);
+        let settings = crate::settings::AgentBrainSettings::load(&self.config.home);
+        resp.suggested_tools = crate::upstream::suggest_upstream_tools(
+            &self.store,
+            &settings.upstream_mcp,
+            user_message,
+            settings.upstream_mcp.suggest_limit,
+        );
         let topics: Vec<String> = resp.relevant_memory.iter().map(|m| m.topic.clone()).collect();
         for (topic, message) in self.store.scope_conflict_warnings(&topics)? {
             resp.warnings.push(crate::types::RouteWarning { topic, message });

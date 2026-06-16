@@ -466,6 +466,21 @@ impl BrainStore {
         })
     }
 
+    pub fn replace_upstream_tools(
+        &self,
+        tools: &[crate::upstream::IndexedUpstreamTool],
+    ) -> Result<()> {
+        let json = serde_json::to_string(tools)?;
+        self.set_meta("upstream_tools_index", &json)
+    }
+
+    pub fn list_upstream_tools(&self) -> Result<Vec<crate::upstream::IndexedUpstreamTool>> {
+        match self.get_meta("upstream_tools_index")? {
+            Some(json) => Ok(serde_json::from_str(&json)?),
+            None => Ok(Vec::new()),
+        }
+    }
+
     pub fn store_fact(
         &self,
         topic: &str,

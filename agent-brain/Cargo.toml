@@ -1,6 +1,6 @@
 [package]
 name = "agent-brain"
-version = "0.7.3"
+version = "0.8.0"
 edition = "2021"
 description = "Fast local MCP router for agents, skills, rules, and memory"
 license = "MIT"
@@ -24,7 +24,7 @@ keyring = "3"
 opendal = { version = "0.52", features = ["services-s3", "services-fs", "layers-blocking"] }
 lru = "0.12"
 regex = "1"
-rmcp = { version = "0.16", features = ["server", "transport-io", "macros"] }
+rmcp = { version = "0.16", features = ["server", "transport-io", "macros", "client", "transport-child-process"] }
 rusqlite = { version = "0.32", features = ["bundled", "functions"] }
 schemars = "1"
 serde = { version = "1", features = ["derive"] }

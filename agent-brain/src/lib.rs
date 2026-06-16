@@ -20,6 +20,7 @@ pub mod sessions;
 pub mod settings;
 pub mod tokens;
 pub mod types;
+pub mod upstream;
 pub mod workspace;
 
 pub use engine::Engine;

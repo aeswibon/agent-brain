@@ -12,6 +12,51 @@ pub struct AgentBrainSettings {
     pub auto_update: AutoUpdateSettings,
     #[serde(default)]
     pub sync: SyncSettings,
+    #[serde(default)]
+    pub upstream_mcp: UpstreamMcpSettings,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct UpstreamMcpSettings {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "default_upstream_max_servers")]
+    pub max_servers: usize,
+    #[serde(default = "default_upstream_suggest_limit")]
+    pub suggest_limit: usize,
+    #[serde(default)]
+    pub servers: Vec<UpstreamServerConfig>,
+}
+
+fn default_upstream_max_servers() -> usize {
+    2
+}
+
+fn default_upstream_suggest_limit() -> usize {
+    2
+}
+
+impl Default for UpstreamMcpSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            max_servers: default_upstream_max_servers(),
+            suggest_limit: default_upstream_suggest_limit(),
+            servers: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct UpstreamServerConfig {
+    pub name: String,
+    pub command: String,
+    #[serde(default)]
+    pub args: Vec<String>,
+    #[serde(default)]
+    pub env: std::collections::HashMap<String, String>,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -252,6 +297,7 @@ impl AgentBrainSettings {
                 ..AutoUpdateSettings::default()
             },
             sync: SyncSettings::default(),
+            upstream_mcp: UpstreamMcpSettings::default(),
         }
     }
 
@@ -344,6 +390,30 @@ auto_update:
         settings.apply_env_overrides();
         assert!(!settings.auto_update.enabled);
         std::env::remove_var("AGENT_BRAIN_AUTO_UPDATE");
+    }
+
+    #[test]
+    fn parses_upstream_mcp_config() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("config.yaml"),
+            r#"
+upstream_mcp:
+  enabled: true
+  max_servers: 2
+  servers:
+    - name: github
+      command: npx
+      args: ["-y", "@modelcontextprotocol/server-github"]
+      env:
+        GITHUB_PERSONAL_ACCESS_TOKEN: "${GITHUB_TOKEN}"
+"#,
+        )
+        .unwrap();
+        let settings = AgentBrainSettings::from_file(dir.path()).unwrap();
+        assert!(settings.upstream_mcp.enabled);
+        assert_eq!(settings.upstream_mcp.servers.len(), 1);
+        assert_eq!(settings.upstream_mcp.servers[0].name, "github");
     }
 
     #[test]

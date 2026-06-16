@@ -147,6 +147,15 @@ pub struct RouteWarning {
     pub message: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SuggestedTool {
+    pub server: String,
+    pub tool: String,
+    pub description: String,
+    pub rationale: String,
+    pub score: f64,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct RouteTaskResponse {
     pub recommended_agents: Vec<AgentRec>,
@@ -156,6 +165,8 @@ pub struct RouteTaskResponse {
     pub must_apply: Vec<MustApply>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub warnings: Vec<RouteWarning>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub suggested_tools: Vec<SuggestedTool>,
     pub recommended_phase: String,
     pub tokens_used: usize,
     pub tokens_budget: usize,

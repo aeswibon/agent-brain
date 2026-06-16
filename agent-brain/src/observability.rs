@@ -98,3 +98,31 @@ pub fn format_inspect_log(row: &crate::db::store::RetrievalLogRow) -> String {
         row.items_json.len()
     )
 }
+
+pub fn log_upstream_call(
+    store: &BrainStore,
+    log_id: &str,
+    server: &str,
+    tool: &str,
+    tokens_used: usize,
+    truncated: bool,
+    is_error: bool,
+    latency_ms: u64,
+) -> Result<()> {
+    let items = serde_json::json!([{
+        "type": "upstream_call",
+        "server": server,
+        "tool": tool,
+        "is_error": is_error,
+    }]);
+    store.insert_retrieval_log(
+        log_id,
+        "upstream",
+        "upstream_call",
+        &items.to_string(),
+        tokens_used,
+        truncated,
+        false,
+        latency_ms,
+    )
+}

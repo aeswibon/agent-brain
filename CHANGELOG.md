@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-06-16
+
+### Added
+
+- **Upstream MCP federation** — `upstream_mcp` block in `~/.agent_brain/config.yaml` registers up to two stdio MCP servers.
+- **`route_to_mcp` MCP tool** — explicit upstream tool calls with semantic JSON/text truncation (`max_tokens` default 500).
+- **`suggested_tools` in `route_task`** — keyword-ranked upstream tool hints from the indexed catalog.
+- **Upstream tool index** — refreshed on bootstrap via `list_tools`; stored in `brain.db` meta.
+- **Upstream call logging** — `retrieval_log` entries with `phase=upstream_call`.
+- **Keychain env refs** — `${VAR}` in upstream `env` resolves via keychain/env and registers `secret_refs`.
+
+### Changed
+
+- `rmcp` client features enabled (`client`, `transport-child-process`) for upstream subprocess transport.
+
 ## [0.7.3] - 2026-06-16
 
 ### Added

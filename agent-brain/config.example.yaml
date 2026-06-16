@@ -15,3 +15,15 @@ auto_update:
     restart_idle_secs: 10
     restart_max_wait_secs: 300
     restart_min_delay_secs: 2
+
+# Optional upstream MCP federation (v0.8+)
+# upstream_mcp:
+#   enabled: true
+#   max_servers: 2
+#   suggest_limit: 2
+#   servers:
+#     - name: github
+#       command: npx
+#       args: ["-y", "@modelcontextprotocol/server-github"]
+#       env:
+#         GITHUB_PERSONAL_ACCESS_TOKEN: "${GITHUB_TOKEN}"
