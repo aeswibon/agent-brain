@@ -22,7 +22,7 @@ fastembed = "4"
 glob = "0.3"
 keyring = "3"
 opendal = { version = "0.52", features = ["services-s3", "services-fs", "layers-blocking"] }
-lru = "0.12"
+lru = "0.16"
 regex = "1"
 rmcp = { version = "0.16", features = ["server", "transport-io", "macros", "client", "transport-child-process"] }
 rusqlite = { version = "0.32", features = ["bundled", "functions"] }
