@@ -166,7 +166,8 @@ pub fn run(fix: bool) -> Result<()> {
 
     println!();
     println!("Tips:");
-    println!("  • agent-brain briefing — readable route without expanding MCP JSON");
+    println!("  • agent-brain briefing — readable route + estimated token savings vs full index");
+    println!("  • agent-brain onboarding — 5-minute getting started checklist");
     println!("  • agent-brain install --all --global — MCP + instructions for Cursor, OpenCode, Claude Code, VS Code");
     println!("  • Only Cursor has hook enforcement (route_gate); other hosts rely on instructions + MCP config");
     println!("  • Background auto-update during serve can exec a new binary after idle (see config auto_update.mcp.restart_after_update)");
@@ -179,6 +180,7 @@ pub fn run(fix: bool) -> Result<()> {
         }
         std::process::exit(1);
     }
+    crate::onboarding::print_onboarding(&config.home, briefing_path.is_file());
     Ok(())
 }
 

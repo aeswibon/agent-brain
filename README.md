@@ -1,10 +1,19 @@
 # agent-brain
 
-Fast, **local** MCP server that routes each turn to the right **agents, skills, rules, and memory** under a strict token budget — with **hook enforcement** so the agent actually uses them.
+**Route ~500 tokens of the right skills from thousands — hooks make it mandatory.**
+
+Local MCP router for Cursor, Claude Code, and other agent IDEs. Cuts input context **~90–99%** vs loading your full skill library (see `agent-brain briefing`). **Hard-enforced** `route_task` via hooks — not “please follow the rule.”
 
 Rust is the brain; Cursor/Claude are the hands.
 
+```bash
+curl -fsSL https://raw.githubusercontent.com/aeswibon/agent-brain/master/scripts/install.sh | bash -s -- --global --with-starter
+agent-brain onboarding
+```
+
 **MCP is live immediately** — `serve` starts stdio first; index sync, session ingest, and prewarm run in a background thread by default.
+
+**Proof narrative:** [before/after blog](docs/blog/before-and-after-agent-brain.md) · [benchmarks](docs/benchmarks/) · [team workflow](docs/TEAM-WORKFLOW.md)
 
 ---
 

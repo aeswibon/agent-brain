@@ -232,6 +232,11 @@ async fn main() -> Result<()> {
                 std::process::exit(1);
             }
         }
+        "onboarding" => {
+            let config = Config::load()?;
+            let briefing = config.home.join("logs").join("last-route.md");
+            agent_brain::onboarding::print_onboarding(&config.home, briefing.is_file());
+        }
         "export" => {
             let config = Config::load()?;
             config.ensure_dirs()?;
@@ -958,6 +963,7 @@ Usage:
   agent-brain config show                     Print active config file
   agent-brain version                         Print installed version
   agent-brain briefing                        Print last human-readable route summary
+  agent-brain onboarding                      USP + 5-minute getting started checklist
   agent-brain export [dir]                    Export sync bundle (manifest + facts.jsonl)
   agent-brain import <dir> [--policy POLICY]  Import sync bundle (newer_wins default)
   agent-brain sync status                     Git sync + recent conflicts summary

@@ -27,6 +27,7 @@ pub mod promote;
 pub mod retrieval;
 pub mod memory_gc;
 pub mod operator_digest;
+pub mod onboarding;
 pub mod eval;
 pub mod fixture;
 pub mod bench;

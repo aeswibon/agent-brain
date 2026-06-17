@@ -147,6 +147,18 @@ main() {
     echo "Installing starter skill pack (@starter) ..."
     "$bin" add @starter || echo "Warning: starter pack install failed (network/git). Run: agent-brain add @starter" >&2
   fi
+
+  if [[ "$PRINT_ONLY" -eq 0 ]]; then
+    echo ""
+    echo "✓ agent-brain installed"
+    echo "  Route ~500 tokens from thousands of skills — hooks enforce routing."
+    if [[ "$WITH_STARTER" -eq 1 ]]; then
+      echo "  Starter pack (@starter) — see output above."
+    else
+      echo "  Next: agent-brain add @starter"
+    fi
+    echo "  Then: restart Cursor · enable MCP · agent-brain onboarding"
+  fi
 }
 
 main "$@"
