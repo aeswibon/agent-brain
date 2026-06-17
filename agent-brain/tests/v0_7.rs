@@ -92,7 +92,8 @@ fn cloud_push_pull_round_trip_local_provider() {
     fs::create_dir_all(&home_b).unwrap();
     let config_b = test_config(&home_b);
     config_b.ensure_dirs().unwrap();
-    let engine_b = Arc::new(Engine::new(config_b).unwrap());
+    let store_b = Arc::new(BrainStore::open(&config_b.db_path).unwrap());
+    let engine_b = Arc::new(Engine::new_with_store(config_b, store_b).unwrap());
     let report = cloud_pull(&engine_b, &settings).unwrap();
 
     assert_eq!(report.import.imported, 1);

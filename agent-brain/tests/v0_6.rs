@@ -99,7 +99,8 @@ fn git_push_pull_round_trip_via_bare_remote() {
 
     let config_b = test_config(&home_b);
     config_b.ensure_dirs().unwrap();
-    let engine_b = Arc::new(Engine::new(config_b).unwrap());
+    let store_b = Arc::new(BrainStore::open(&config_b.db_path).unwrap());
+    let engine_b = Arc::new(Engine::new_with_store(config_b, store_b).unwrap());
     let report = git_pull(&engine_b, &settings).unwrap();
 
     assert_eq!(report.imported, 1);
