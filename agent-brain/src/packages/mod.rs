@@ -7,6 +7,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::Config;
 
+mod curated;
+pub use curated::{list_aliases, resolve_package_inputs, CuratedAliasInfo};
+
 const REGISTRY_FILE: &str = "packages.json";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

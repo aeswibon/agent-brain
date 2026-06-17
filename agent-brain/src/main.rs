@@ -53,17 +53,20 @@ async fn main() -> Result<()> {
             println!("Indexed {n} items");
         }
         "add" => {
-            let source = args.get(2).context("missing package source (owner/repo or GitHub URL)")?;
+            let source = args.get(2).context("missing package source (@alias, owner/repo, or GitHub URL)")?;
             let git_ref = flag_value(&args, "--ref");
             let skip_index = args.iter().any(|a| a == "--no-index");
             let config = Config::load()?;
-            let record = packages::add_package(&config, source, git_ref.as_deref())?;
-            println!(
-                "Installed package '{}' from {} ({})",
-                record.name,
-                record.source,
-                record.commit.unwrap_or_else(|| "unknown".into())
-            );
+            let sources = packages::resolve_package_inputs(source)?;
+            for src in &sources {
+                let record = packages::add_package(&config, src, git_ref.as_deref())?;
+                println!(
+                    "Installed package '{}' from {} ({})",
+                    record.name,
+                    record.source,
+                    record.commit.unwrap_or_else(|| "unknown".into())
+                );
+            }
             if !skip_index {
                 let mut config = config;
                 config.bootstrap_background = false;
@@ -71,6 +74,22 @@ async fn main() -> Result<()> {
                 let engine = Arc::new(Engine::new(config)?);
                 let n = engine.bootstrap(None)?;
                 println!("Indexed {n} items");
+            }
+        }
+        "registry" => {
+            match args.get(2).map(String::as_str).unwrap_or("list") {
+                "list" => {
+                    for entry in packages::list_aliases()? {
+                        let pkgs = entry.packages.join(", ");
+                        println!("@{:<8}  {}  [{}]", entry.alias, entry.description, pkgs);
+                    }
+                }
+                other => {
+                    eprintln!("Usage: agent-brain registry list");
+                    if !other.is_empty() {
+                        std::process::exit(1);
+                    }
+                }
             }
         }
         "package" => {
@@ -893,8 +912,10 @@ fn print_usage() {
 Usage:
   agent-brain serve                         Start MCP server (stdio)
   agent-brain index                         Reindex local agents/skills/rules/memory
-  agent-brain add <owner/repo|url>          Install a GitHub package and index it
-  agent-brain add affaan-m/ecc --ref main   Install with explicit git ref
+  agent-brain add <@alias|owner/repo|url>   Install package(s) and index
+  agent-brain add @starter                  Curated onboarding pack
+  agent-brain add @nextjs                   Vercel React/Next.js skills
+  agent-brain registry list                 Show curated @aliases
   agent-brain package list                  List installed packages
   agent-brain package update [name]         Update one or all packages
   agent-brain package remove <name>         Remove an installed package

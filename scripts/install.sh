@@ -13,12 +13,14 @@ INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 FROM_SOURCE=0
 GLOBAL=0
 PRINT_ONLY=0
+WITH_STARTER=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --from-source) FROM_SOURCE=1; shift ;;
     --global) GLOBAL=1; shift ;;
     --print-only) PRINT_ONLY=1; shift ;;
+    --with-starter) WITH_STARTER=1; shift ;;
     -h|--help)
       cat <<'EOF'
 Install agent-brain for Cursor MCP.
@@ -27,6 +29,7 @@ Options:
   --from-source   Build with cargo instead of downloading a release binary
   --global        Write ~/.cursor/mcp.json (default: ./.cursor/mcp.json)
   --print-only    Print MCP config JSON without writing files
+  --with-starter  After install, run: agent-brain add @starter
   --help          Show this help
 
 Environment:
@@ -139,6 +142,11 @@ main() {
 
   echo "Configuring Cursor MCP ..."
   "$bin" "${args[@]}"
+
+  if [[ "$WITH_STARTER" -eq 1 && "$PRINT_ONLY" -eq 0 ]]; then
+    echo "Installing starter skill pack (@starter) ..."
+    "$bin" add @starter || echo "Warning: starter pack install failed (network/git). Run: agent-brain add @starter" >&2
+  fi
 }
 
 main "$@"

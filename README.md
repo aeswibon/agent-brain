@@ -62,7 +62,7 @@ You still use Cursor Agent mode. agent-brain does not replace the model — it *
 |---------|------------------|------------|
 | **Turn routing** | MCP `route_task` (automatic via hooks) | Right skills under token budget every message |
 | **Hook enforcement** | `agent-brain install --global` | Hard gate — not “please follow the rule” |
-| **Skill packages** | `agent-brain add affaan-m/ecc` | One command to install + index hundreds of skills |
+| **Skill packages** | `agent-brain add @nextjs` or `owner/repo` | Curated aliases + one-command installs |
 | **Durable memory** | Agent calls `store_memory` at task end | Conventions persist across sessions |
 | **Git sync** | `config.yaml` + `sync git init` | Second machine pulls same brain bundle |
 | **Cloud sync** | `config.yaml` + `AGENT_BRAIN_SYNC_KEY` | Encrypted off-site backup (S3/R2/MinIO) |
@@ -91,6 +91,8 @@ Reproducible proof artifacts live in [`docs/benchmarks/`](docs/benchmarks/). Reg
 **skills.sh eval** runs against committed `fixture-2k.db` — no network, no synthetic fillers. See [docs/benchmarks/skills-sh/README.md](docs/benchmarks/skills-sh/README.md).
 
 **Token savings (every turn):** `agent-brain briefing` and `~/.agent_brain/logs/last-route.md` show routed tokens vs an estimated naive full-index load (~120 tok/item). On a 2000-skill index routing ~500 tokens, that is typically **~99% fewer tokens** than loading everything.
+
+**Curated skill packs:** `agent-brain registry list` · `agent-brain add @starter` — see [docs/registry/README.md](docs/registry/README.md).
 
 ---
 

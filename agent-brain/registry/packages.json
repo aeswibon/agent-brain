@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "aliases": {
+    "starter": {
+      "description": "Lightweight onboarding — skill discovery + Vercel React patterns",
+      "packages": [
+        "vercel-labs/skills",
+        "vercel-labs/agent-skills"
+      ]
+    },
+    "nextjs": {
+      "description": "Vercel React, Next.js, and React Native agent skills",
+      "packages": ["vercel-labs/agent-skills"]
+    },
+    "ecc": {
+      "description": "Everything Claude Code — large curated skill library",
+      "packages": ["affaan-m/everything-claude-code"]
+    },
+    "rust": {
+      "description": "Rust patterns, testing, and review (via ECC)",
+      "packages": ["affaan-m/everything-claude-code"]
+    }
+  }
+}
