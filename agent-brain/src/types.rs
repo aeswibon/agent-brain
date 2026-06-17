@@ -188,6 +188,8 @@ pub struct RouteTaskResponse {
     pub index_total: usize,
     /// One-line human summary (full markdown: `agent-brain briefing` or logs/last-route.md)
     pub briefing: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code_context: Option<crate::graphify::CodeContext>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

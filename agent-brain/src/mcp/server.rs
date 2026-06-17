@@ -227,6 +227,34 @@ fn default_grep_matches() -> usize {
     crate::token_tools::DEFAULT_GREP_MAX_MATCHES
 }
 
+#[derive(Debug, Deserialize, JsonSchema)]
+struct QueryCodebaseParams {
+    question: String,
+    #[serde(default)]
+    current_working_directory: Option<String>,
+    #[serde(default = "default_query_budget")]
+    max_tokens: usize,
+}
+
+fn default_query_budget() -> usize {
+    1500
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct TriggerDeepAnalysisParams {
+    #[serde(default)]
+    repo_root: Option<String>,
+    #[serde(default)]
+    mode: Option<String>,
+    #[serde(default)]
+    reason: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct GraphifyJobStatusParams {
+    job_id: String,
+}
+
 #[tool_router]
 impl BrainMcp {
     #[tool(description = "REQUIRED every turn before planning or edits. Returns ranked agents, skills, rules, and memory under a token budget. Pass user_message, current_working_directory, and open_files.")]
@@ -611,6 +639,65 @@ impl BrainMcp {
         json_result(resp)
     }
 
+    #[tool(description = "Deep codebase navigation via graphify graph. Call for unfamiliar code paths — not every turn.")]
+    async fn query_codebase(
+        &self,
+        params: Parameters<QueryCodebaseParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let _req = self.engine.mcp_activity.begin_request();
+        let p = params.0;
+        let repo = resolve_graphify_repo(p.current_working_directory.as_deref())?;
+        let settings = crate::settings::AgentBrainSettings::load(&self.engine.config.home);
+        let text = crate::graphify::query_codebase(
+            &repo,
+            &p.question,
+            p.max_tokens,
+            &settings.graphify.graphify_bin,
+        )
+        .map_err(|e| McpError::invalid_params(format!("{e}"), None))?;
+        json_result(serde_json::json!({ "answer": text }))
+    }
+
+    #[tool(description = "Queue graphify semantic/AST rebuild for an unfamiliar or stale codebase. Returns job_id — poll graphify_job_status.")]
+    async fn trigger_deep_analysis(
+        &self,
+        params: Parameters<TriggerDeepAnalysisParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let _req = self.engine.mcp_activity.begin_request();
+        let p = params.0;
+        let repo = resolve_graphify_repo(p.repo_root.as_deref())?;
+        let settings = crate::settings::AgentBrainSettings::load(&self.engine.config.home);
+        let mode = match p.mode.as_deref() {
+            Some("full") => crate::graphify::JobMode::Full,
+            _ => crate::graphify::JobMode::Update,
+        };
+        let job_id = crate::graphify::enqueue_job(
+            &self.engine,
+            &repo,
+            crate::graphify::JobTrigger::Agent,
+            mode,
+            &settings.graphify.graphify_bin,
+        )
+        .map_err(|e| McpError::internal_error(format!("{e}"), None))?;
+        json_result(serde_json::json!({
+            "job_id": job_id,
+            "status": "queued",
+            "reason": p.reason,
+        }))
+    }
+
+    #[tool(description = "Poll status for trigger_deep_analysis job.")]
+    async fn graphify_job_status(
+        &self,
+        params: Parameters<GraphifyJobStatusParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let _req = self.engine.mcp_activity.begin_request();
+        let p = params.0;
+        let status = crate::graphify::job_status(&self.engine, &p.job_id)
+            .map_err(|e| McpError::invalid_params(format!("{e}"), None))?;
+        json_result(status)
+    }
+
     fn log_token_tool(
         &self,
         tool_name: &str,
@@ -677,6 +764,16 @@ fn json_result<T: serde::Serialize>(value: T) -> Result<CallToolResult, McpError
     let text = serde_json::to_string(&value)
         .map_err(|e| McpError::internal_error(format!("{e}"), None))?;
     Ok(CallToolResult::success(vec![Content::text(text)]))
+}
+
+fn resolve_graphify_repo(cwd: Option<&str>) -> Result<PathBuf, McpError> {
+    let path = cwd
+        .map(PathBuf::from)
+        .or_else(|| std::env::current_dir().ok())
+        .ok_or_else(|| McpError::invalid_params("current_working_directory required".to_string(), None))?;
+    std::fs::canonicalize(&path).map_err(|e| {
+        McpError::invalid_params(format!("resolve repo root: {e}"), None)
+    })
 }
 
 fn infer_memory_polarity(fact: &str) -> Option<String> {

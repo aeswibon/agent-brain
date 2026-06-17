@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-06-17
+
+### Added
+
+- **Graphify orchestration** — `agent-brain graphify enable|disable|status|ingest|run|query` ingests `graphify-out/graph.json` into `brain.db`.
+- **MCP tools** — `query_codebase`, `trigger_deep_analysis`, `graphify_job_status` wrap graphify CLI for deep code navigation.
+- **`code_context` in `route_task`** — god nodes + relevant graph nodes when a repo has ingested code graph data (schema v10).
+
 ## [0.16.1] - 2026-06-17
 
 ### Fixed

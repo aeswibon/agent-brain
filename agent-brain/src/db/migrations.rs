@@ -173,6 +173,15 @@ pub fn run(conn: &Connection) -> rusqlite::Result<()> {
         conn.execute("UPDATE schema_version SET version = 9", [])?;
     }
 
+    let version: i64 = conn
+        .query_row("SELECT version FROM schema_version LIMIT 1", [], |r| r.get(0))
+        .unwrap_or(0);
+
+    if version < 10 {
+        migrate_v10(conn)?;
+        conn.execute("UPDATE schema_version SET version = 10", [])?;
+    }
+
     Ok(())
 }
 
@@ -336,6 +345,52 @@ fn migrate_v9(conn: &Connection) -> rusqlite::Result<()> {
             route_log_id TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_tool_log_timestamp ON tool_log(timestamp);
+        "#,
+    )?;
+    Ok(())
+}
+
+fn migrate_v10(conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS code_graph_nodes (
+            id TEXT PRIMARY KEY,
+            repo_root TEXT NOT NULL,
+            graphify_id TEXT NOT NULL,
+            label TEXT NOT NULL,
+            community_id INTEGER,
+            is_god_node INTEGER NOT NULL DEFAULT 0,
+            source_file TEXT,
+            file_type TEXT,
+            ingested_at INTEGER NOT NULL,
+            UNIQUE(repo_root, graphify_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_code_graph_nodes_repo ON code_graph_nodes(repo_root);
+
+        CREATE TABLE IF NOT EXISTS code_graph_edges (
+            id TEXT PRIMARY KEY,
+            repo_root TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            target_id TEXT NOT NULL,
+            relation TEXT NOT NULL,
+            confidence TEXT,
+            confidence_score REAL,
+            ingested_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_code_graph_edges_repo ON code_graph_edges(repo_root);
+
+        CREATE TABLE IF NOT EXISTS graphify_jobs (
+            id TEXT PRIMARY KEY,
+            repo_root TEXT NOT NULL,
+            trigger TEXT NOT NULL,
+            mode TEXT NOT NULL,
+            status TEXT NOT NULL,
+            started_at INTEGER,
+            finished_at INTEGER,
+            error TEXT,
+            result_json TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_graphify_jobs_repo ON graphify_jobs(repo_root);
         "#,
     )?;
     Ok(())

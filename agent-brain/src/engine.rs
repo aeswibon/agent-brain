@@ -480,6 +480,16 @@ impl Engine {
             &phase,
             &resp.must_apply,
         );
+        if let Some(repo) = ws.repo_root.as_deref() {
+            if settings.graphify.enabled {
+                resp.code_context = crate::graphify::route_code_context(
+                    &self.store,
+                    std::path::Path::new(repo),
+                    user_message,
+                    100,
+                );
+            }
+        }
         let topics: Vec<String> = resp.relevant_memory.iter().map(|m| m.topic.clone()).collect();
         for (topic, message) in self.store.scope_conflict_warnings(&topics)? {
             resp.warnings.push(crate::types::RouteWarning { topic, message });

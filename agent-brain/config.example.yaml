@@ -16,6 +16,12 @@ auto_update:
     restart_max_wait_secs: 300
     restart_min_delay_secs: 2
 
+# Optional graphify orchestration (v0.17+)
+# graphify:
+#   enabled: true
+#   graphify_bin: graphify
+#   default_query_budget: 1500
+
 # Optional upstream MCP federation (v0.8+)
 # upstream_mcp:
 #   enabled: true

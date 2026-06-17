@@ -259,6 +259,25 @@ async fn main() -> Result<()> {
                 println!("\n---\nSuggested store_memory (from hook):\n{}\n", serde_json::to_string_pretty(&suggestion)?);
             }
         }
+        "graphify" => {
+            let config = Config::load()?;
+            let engine = Arc::new(Engine::new(config)?);
+            let sub = args.get(2).map(String::as_str).unwrap_or("status").to_string();
+            let cli = agent_brain::graphify::GraphifyCli {
+                sub: sub.clone(),
+                repo: flag_value(&args, "--repo").map(std::path::PathBuf::from),
+                trigger: flag_value(&args, "--trigger"),
+                mode: flag_value(&args, "--mode"),
+                job_id: flag_value(&args, "--id"),
+                question: flag_value(&args, "--question").or_else(|| {
+                    args.get(3).filter(|_| matches!(sub.as_str(), "query")).cloned()
+                }),
+                budget: flag_value(&args, "--budget")
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(1500),
+            };
+            agent_brain::graphify::run_cli(&engine, cli)?;
+        }
         "suggest-memory" => {
             let config = Config::load()?;
             let sub = args.get(2).map(String::as_str).unwrap_or("show");
@@ -1082,6 +1101,7 @@ Usage:
   agent-brain version                         Print installed version
   agent-brain briefing                        Print last human-readable route summary
   agent-brain suggest-memory [approve|reject] Show or promote hook anti-pattern to store_memory
+  agent-brain graphify enable|disable|status|ingest|run|query  Graphify orchestration (codebase graph)
   agent-brain stats [--days N] [--json]       Index, routing, token savings, adoption milestones
   agent-brain digest --weekly                 Operator digest from retrieval_log
   agent-brain onboarding                      USP + 5-minute getting started checklist

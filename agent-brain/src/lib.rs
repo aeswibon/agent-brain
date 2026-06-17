@@ -6,6 +6,7 @@ pub mod db;
 pub mod doctor;
 pub mod serve_meta;
 pub mod embed;
+pub mod graphify;
 pub mod engine;
 pub mod index;
 pub mod host_install;

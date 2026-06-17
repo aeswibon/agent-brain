@@ -16,6 +16,8 @@ pub struct AgentBrainSettings {
     pub upstream_mcp: UpstreamMcpSettings,
     #[serde(default)]
     pub memory_gc: MemoryGcSettings,
+    #[serde(default)]
+    pub graphify: GraphifySettings,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -39,6 +41,41 @@ impl Default for MemoryGcSettings {
         Self {
             stale_days: default_memory_gc_stale_days(),
             very_stale_days: default_memory_gc_very_stale_days(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct GraphifySettings {
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default = "default_graphify_bin")]
+    pub graphify_bin: String,
+    #[serde(default = "default_graphify_max_jobs")]
+    pub max_concurrent_jobs: usize,
+    #[serde(default = "default_graphify_query_budget")]
+    pub default_query_budget: usize,
+}
+
+fn default_graphify_bin() -> String {
+    "graphify".into()
+}
+
+fn default_graphify_max_jobs() -> usize {
+    1
+}
+
+fn default_graphify_query_budget() -> usize {
+    1500
+}
+
+impl Default for GraphifySettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            graphify_bin: default_graphify_bin(),
+            max_concurrent_jobs: default_graphify_max_jobs(),
+            default_query_budget: default_graphify_query_budget(),
         }
     }
 }
@@ -326,6 +363,7 @@ impl AgentBrainSettings {
             sync: SyncSettings::default(),
             upstream_mcp: UpstreamMcpSettings::default(),
             memory_gc: MemoryGcSettings::default(),
+            graphify: GraphifySettings::default(),
         }
     }
 
