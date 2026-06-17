@@ -69,11 +69,28 @@ You still use Cursor Agent mode. agent-brain does not replace the model — it *
 | **Auto-update** | `~/.agent_brain/config.yaml` | Package + MCP binary updates while `serve` runs |
 | **CLI MCP allowlist** | `~/.cursor/permissions.json` | Cursor CLI stops prompting every agent session |
 | **Resilience** | Default hook scope `brain_mcp` | MCP down ≠ entire session frozen |
-| **Observability** | `agent-brain briefing`, `last-route.md` | See what was routed without parsing MCP JSON |
+| **Observability** | `agent-brain briefing`, `last-route.md` | See what was routed + est. token savings vs full index |
 
 **Full operator guide:** [docs/USAGE.md](docs/USAGE.md)
 
 **Architecture deep dive (series):** [docs/architecture/README.md](docs/architecture/README.md) — design goals, rationale, and alternatives for each major component.
+
+---
+
+## Published benchmarks (CI)
+
+Reproducible proof artifacts live in [`docs/benchmarks/`](docs/benchmarks/). Regenerate locally with `cargo run --release -p agent-brain -- proofs --ci`.
+
+| Gate | Index size | Golden cases | Recall@3 | Threshold | CI |
+|------|------------|--------------|----------|-----------|-----|
+| Isolated skills + memory | 500 skills | 10 | **1.00** (10/10) | ≥ 0.85 | `stage-test.yml` |
+| skills.sh catalog | **2000 real** skills.sh skills | **30** | **1.00** (30/30) | ≥ 0.80 | `stage-skills-sh-eval.yml` |
+| Warm-route p95 (fixture) | 500 | — | **≤ 100 ms** | gated | `proofs --ci` |
+| Hook gate logic | — | — | **< 1 ms p95** | gated | `test_route_gate.py` |
+
+**skills.sh eval** runs against committed `fixture-2k.db` — no network, no synthetic fillers. See [docs/benchmarks/skills-sh/README.md](docs/benchmarks/skills-sh/README.md).
+
+**Token savings (every turn):** `agent-brain briefing` and `~/.agent_brain/logs/last-route.md` show routed tokens vs an estimated naive full-index load (~120 tok/item). On a 2000-skill index routing ~500 tokens, that is typically **~99% fewer tokens** than loading everything.
 
 ---
 

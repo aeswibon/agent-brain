@@ -5,6 +5,55 @@ use chrono::Local;
 
 use crate::types::RouteTaskResponse;
 
+/// Rough tokens if every indexed item were loaded (~120 tok/item). Informational only.
+pub const NAIVE_TOKENS_PER_INDEXED_ITEM: usize = 120;
+
+#[derive(Debug, Clone, Copy)]
+pub struct TokenSavings {
+    pub index_total: usize,
+    pub naive_tokens: usize,
+    pub routed_tokens: usize,
+    pub tokens_budget: usize,
+    pub saved_tokens: usize,
+    pub saved_pct: usize,
+}
+
+pub fn token_savings(resp: &RouteTaskResponse) -> Option<TokenSavings> {
+    if resp.index_total == 0 {
+        return None;
+    }
+    let naive_tokens = resp.index_total.saturating_mul(NAIVE_TOKENS_PER_INDEXED_ITEM);
+    let saved_tokens = naive_tokens.saturating_sub(resp.tokens_used);
+    let saved_pct = if naive_tokens > 0 {
+        saved_tokens.saturating_mul(100) / naive_tokens
+    } else {
+        0
+    };
+    Some(TokenSavings {
+        index_total: resp.index_total,
+        naive_tokens,
+        routed_tokens: resp.tokens_used,
+        tokens_budget: resp.tokens_budget,
+        saved_tokens,
+        saved_pct,
+    })
+}
+
+pub fn format_token_savings_line(resp: &RouteTaskResponse) -> String {
+    let Some(s) = token_savings(resp) else {
+        return String::new();
+    };
+    format!(
+        "Index: {} items · est. naive load ~{} tok · routed {}/{} tok · saved ~{} tok (~{}%)",
+        s.index_total,
+        s.naive_tokens,
+        s.routed_tokens,
+        s.tokens_budget,
+        s.saved_tokens,
+        s.saved_pct
+    )
+}
+
 pub fn format_briefing(resp: &RouteTaskResponse) -> String {
     let mut out = String::new();
     let ts = Local::now().format("%Y-%m-%d %H:%M:%S");
@@ -17,6 +66,10 @@ pub fn format_briefing(resp: &RouteTaskResponse) -> String {
         resp.tokens_used,
         resp.tokens_budget
     ));
+    let savings = format_token_savings_line(resp);
+    if !savings.is_empty() {
+        out.push_str(&format!("{savings}\n"));
+    }
     if !resp.log_id.is_empty() {
         out.push_str(&format!("Log: `{}`\n", resp.log_id));
     }
@@ -88,13 +141,17 @@ fn section_list(out: &mut String, title: &str, items: impl Iterator<Item = Strin
 pub fn format_summary_line(resp: &RouteTaskResponse) -> String {
     let skill_names = join_top_names(resp.recommended_skills.iter().map(|s| s.name.as_str()), 3);
     let agent_names = join_top_names(resp.recommended_agents.iter().map(|a| a.name.as_str()), 2);
+    let savings = token_savings(resp).map(|s| format!(" · saved ~{}%", s.saved_pct));
     format!(
-        "phase={} · skills: {} [{skill_names}] · agents: {} [{agent_names}] · {} rules · {} memory · {}ms · log={} · {}",
+        "phase={} · skills: {} [{skill_names}] · agents: {} [{agent_names}] · {} rules · {} memory · {}/{} tok{} · {}ms · log={} · {}",
         resp.recommended_phase,
         resp.recommended_skills.len(),
         resp.recommended_agents.len(),
         resp.applicable_rules.len(),
         resp.relevant_memory.len(),
+        resp.tokens_used,
+        resp.tokens_budget,
+        savings.unwrap_or_default(),
         resp.latency_ms,
         resp.log_id,
         briefing_path_display()
@@ -160,6 +217,7 @@ mod tests {
             recommended_phase: "debugging".into(),
             tokens_used: 100,
             tokens_budget: 500,
+            index_total: 2000,
             latency_ms: 12,
             log_id: "abc".into(),
             ..Default::default()
@@ -168,10 +226,27 @@ mod tests {
         assert!(text.contains("rust-reviewer"));
         assert!(text.contains("rust-testing"));
         assert!(text.contains("debugging"));
+        assert!(text.contains("saved ~"));
+        assert!(text.contains("2000 items"));
 
         let summary = format_summary_line(&resp);
         assert!(summary.contains("rust-reviewer"));
         assert!(summary.contains("rust-testing"));
         assert!(summary.contains("phase=debugging"));
+        assert!(summary.contains("saved ~"));
+    }
+
+    #[test]
+    fn token_savings_math() {
+        let resp = RouteTaskResponse {
+            tokens_used: 477,
+            tokens_budget: 500,
+            index_total: 2000,
+            ..Default::default()
+        };
+        let s = token_savings(&resp).unwrap();
+        assert_eq!(s.naive_tokens, 240_000);
+        assert_eq!(s.saved_tokens, 239_523);
+        assert!(s.saved_pct >= 99);
     }
 }

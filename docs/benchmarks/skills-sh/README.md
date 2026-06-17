@@ -4,7 +4,7 @@
 
 1. **Commit a snapshot** of real skills (`snapshot.json`) synced via public APIs
 2. **Build `fixture-2k.db`** — pre-indexed SQLite with **2000 real** skills.sh skills (no synthetic fillers)
-3. **Gate routing** with golden queries (`golden.json`) at **Recall@3 ≥ 0.80**
+3. **Gate routing** with golden queries (`golden.json`) at **Recall@3 ≥ 0.80** — currently **30 cases**, **1.00** on the committed fixture (see `../skills-sh-latest.json`).
 
 CI opens the committed DB (copied to a temp dir) — no runtime seeding.
 
@@ -27,6 +27,9 @@ cargo run --release -p agent-brain -- eval --skills-sh --write docs/benchmarks/s
 
 # Compare runtime seed vs committed DB
 cargo run --release -p agent-brain -- eval --skills-sh --seed
+
+# Expand golden cases (probes fixture routing; writes golden.json)
+cargo run --release -p agent-brain -- skills-sh golden-probe --target 30
 
 # Refresh snapshot (rate-limited; ~20–40 min for 2000 skills)
 cargo run --release -p agent-brain -- skills-sh sync --target 2000 --merge --delay-ms 400 --write docs/benchmarks/skills-sh/snapshot.json
@@ -54,7 +57,7 @@ cargo run --release -p agent-brain -- skills-sh sync --target 2000 --merge --del
 
 1. Run `skills-sh sync --target 2000 --merge` (checkpoints to `snapshot.json` every 50 skills)
 2. Run `fixture build` then `eval --skills-sh` locally before pushing
-3. Add skill ids to `manifest.json` `required_ids` if they must always be present
-4. Add matching cases to `golden.json` for new routing gates
+3. Run `skills-sh golden-probe --target 30` to add routing cases that pass on the fixture
+4. Add skill ids to `manifest.json` `required_ids` if they must always be present
 
 See [../../architecture/13-proofs-and-benchmarks.md](../../architecture/13-proofs-and-benchmarks.md).

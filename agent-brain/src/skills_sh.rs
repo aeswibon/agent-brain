@@ -741,6 +741,105 @@ pub fn run_skills_sh_eval(
     )
 }
 
+pub fn write_golden(path: &Path, golden: &SkillsShGoldenFile) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let json = serde_json::to_string_pretty(golden)?;
+    std::fs::write(path, format!("{json}\n")).with_context(|| format!("write {}", path.display()))?;
+    Ok(())
+}
+
+fn query_templates_for_skill(skill: &SkillsShSkillRecord) -> Vec<String> {
+    let topic_words = skill.topic.replace('-', " ");
+    let mut out = vec![
+        format!("{topic_words} best practices and patterns"),
+        format!("help me with {topic_words}"),
+        format!("how to use {topic_words} in my project"),
+    ];
+    if !skill.name.is_empty() && skill.name != skill.topic {
+        out.push(format!("{} workflow guidance", skill.name.replace('-', " ")));
+    }
+    let line = skill
+        .text
+        .lines()
+        .find(|l| l.len() > 24 && l.len() < 180)
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    if !line.is_empty() {
+        out.push(line);
+    }
+    out
+}
+
+fn skill_probe_priority(skill: &SkillsShSkillRecord) -> u64 {
+    let download_boost = if skill.indexed_from == "download" { 1_000_000 } else { 0 };
+    let text_len = skill.text.len().min(50_000) as u64;
+    download_boost + text_len + skill.installs.unwrap_or(0)
+}
+
+/// Probe routing queries against a fixture DB and return cases that hit Recall@3.
+pub fn probe_golden_cases(
+    fixture_db: &Path,
+    snapshot_path: &Path,
+    target: usize,
+) -> Result<SkillsShGoldenFile> {
+    let snapshot = load_snapshot(snapshot_path)?;
+    let manifest = load_manifest(&default_manifest_path())?;
+    let (engine, _dir) = open_fixture_engine(fixture_db)?;
+    let limits = RouteLimits {
+        agents: 0,
+        skills: 3,
+        rules: 0,
+        memory: 0,
+    };
+
+    let mut skills: Vec<&SkillsShSkillRecord> = snapshot.skills.iter().collect();
+    skills.sort_by_key(|s| std::cmp::Reverse(skill_probe_priority(s)));
+
+    let required: std::collections::BTreeSet<String> =
+        manifest.required_ids.iter().cloned().collect();
+    skills.sort_by_key(|s| if required.contains(&s.id) { 0 } else { 1 });
+
+    let mut cases = Vec::new();
+    let mut seen_topics = std::collections::BTreeSet::new();
+
+    for skill in skills {
+        if cases.len() >= target {
+            break;
+        }
+        if !seen_topics.insert(skill.topic.clone()) {
+            continue;
+        }
+        for query in query_templates_for_skill(skill) {
+            let resp = engine.route_task(
+                &query,
+                None,
+                &[],
+                500,
+                limits,
+                Some("implementing"),
+            )?;
+            let hit = resp
+                .recommended_skills
+                .iter()
+                .take(3)
+                .any(|s| s.name == skill.topic);
+            if hit {
+                cases.push(SkillsShGoldenCase {
+                    query,
+                    expected_topic: skill.topic.clone(),
+                    skill_id: skill.id.clone(),
+                });
+                break;
+            }
+        }
+    }
+
+    Ok(SkillsShGoldenFile { cases })
+}
+
 pub fn assert_skills_sh_gate(report: &SkillsShEvalReport) -> Result<()> {
     if report.passed_gate {
         return Ok(());

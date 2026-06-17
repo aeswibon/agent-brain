@@ -454,6 +454,7 @@ impl Engine {
 
         let build_started = Instant::now();
         let mut resp = build_route_response(&scored, &limits, &phase, max_tokens);
+        resp.index_total = index_total;
         let settings = crate::settings::AgentBrainSettings::load(&self.config.home);
         resp.suggested_tools = crate::upstream::suggest_upstream_tools(
             &self.store,
@@ -508,6 +509,11 @@ impl Engine {
     }
 
     fn finish_route_response(&self, mut resp: RouteTaskResponse) -> RouteTaskResponse {
+        if resp.index_total == 0 {
+            if let Ok(n) = self.store.count_indexed_items() {
+                resp.index_total = n;
+            }
+        }
         if self.config.route_briefing_enabled {
             route_briefing::publish_briefing(
                 &self.config.home,

@@ -173,6 +173,9 @@ pub struct RouteTaskResponse {
     pub cache_hit: bool,
     pub latency_ms: u64,
     pub log_id: String,
+    /// Total indexed items considered during routing (skills + memory + rules in index).
+    #[serde(default)]
+    pub index_total: usize,
     /// One-line human summary (full markdown: `agent-brain briefing` or logs/last-route.md)
     pub briefing: String,
 }

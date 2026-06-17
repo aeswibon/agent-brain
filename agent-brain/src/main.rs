@@ -773,8 +773,33 @@ async fn main() -> Result<()> {
                         write_path.display()
                     );
                 }
+                "golden-probe" => {
+                    let fixture = flag_value(&args, "--fixture-db")
+                        .map(PathBuf::from)
+                        .unwrap_or_else(agent_brain::fixture::default_fixture_2k_path);
+                    let snapshot = flag_value(&args, "--snapshot")
+                        .map(PathBuf::from)
+                        .unwrap_or_else(agent_brain::skills_sh::default_snapshot_path);
+                    let write_path = flag_value(&args, "--write")
+                        .map(PathBuf::from)
+                        .unwrap_or_else(agent_brain::skills_sh::default_golden_path);
+                    let target = flag_value(&args, "--target")
+                        .and_then(|v| v.parse().ok())
+                        .unwrap_or(25);
+                    let golden =
+                        agent_brain::skills_sh::probe_golden_cases(&fixture, &snapshot, target)?;
+                    agent_brain::skills_sh::write_golden(&write_path, &golden)?;
+                    eprintln!(
+                        "Probed {} golden cases (target {}) → {}",
+                        golden.cases.len(),
+                        target,
+                        write_path.display()
+                    );
+                    println!("{}", serde_json::to_string_pretty(&golden)?);
+                }
                 _ => {
                     eprintln!("Usage: agent-brain skills-sh sync [--target N] [--merge] [--manifest PATH] [--write PATH] [--delay-ms N] [--required-only]");
+                    eprintln!("       agent-brain skills-sh golden-probe [--target N] [--fixture-db PATH] [--snapshot PATH] [--write PATH]");
                     std::process::exit(1);
                 }
             }
