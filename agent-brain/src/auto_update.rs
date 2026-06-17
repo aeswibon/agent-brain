@@ -244,13 +244,9 @@ fn update_configured_packages(engine: &Arc<Engine>, cfg: &AutoUpdateSettings) ->
 }
 
 fn update_mcp_binary(cfg: &AutoUpdateSettings, current_version: &str) -> Result<Option<String>> {
-    let release = fetch_latest_release(&cfg.mcp.repo).with_context(|| {
-        format!(
-            "fetch latest GitHub release for `{}` (check auto_update.mcp.repo in ~/.agent_brain/config.yaml)",
-            cfg.mcp.repo
-        )
-    })?;
-    let latest = &release.tag_name;
+    let target = detect_release_target().context("unsupported platform for mcp auto-update")?;
+    let asset = release_artifact_name(target);
+    let (latest, url) = resolve_latest_mcp_release(cfg, target, &asset)?;
     let latest_version = latest.trim_start_matches('v');
     if version_is_newer(current_version, latest_version) {
         tracing::info!(
@@ -264,10 +260,6 @@ fn update_mcp_binary(cfg: &AutoUpdateSettings, current_version: &str) -> Result<
     if !version_is_newer(latest_version, current_version) {
         return Ok(None);
     }
-
-    let target = detect_release_target().context("unsupported platform for mcp auto-update")?;
-    let asset = resolve_release_asset(target, &release)?;
-    let url = release_download_url(&cfg.mcp.repo, latest, &asset);
 
     let bin_path = expand_home(&cfg.mcp.bin_path);
     if let Some(parent) = bin_path.parent() {
@@ -285,14 +277,17 @@ fn update_mcp_binary(cfg: &AutoUpdateSettings, current_version: &str) -> Result<
 
     #[cfg(target_os = "macos")]
     {
-        if let Err(err) = crate::doctor::adhoc_sign(&bin_path) {
-            tracing::warn!(
-                target: "agent_brain::auto_update",
-                path = %bin_path.display(),
-                error = %err,
-                "adhoc codesign after binary update failed"
-            );
-        }
+        crate::doctor::adhoc_sign(&bin_path).with_context(|| {
+            format!(
+                "adhoc codesign after binary update failed for {}\n\
+                 macOS blocks quarantined downloads under Cursor. Run:\n\
+                   xattr -cr {}\n\
+                   codesign --force --sign - {}",
+                bin_path.display(),
+                bin_path.display(),
+                bin_path.display()
+            )
+        })?;
     }
 
     tracing::info!(
@@ -445,6 +440,73 @@ struct GhRelease {
     assets: Vec<GhReleaseAsset>,
 }
 
+fn resolve_latest_mcp_release(
+    cfg: &AutoUpdateSettings,
+    target: &str,
+    asset: &str,
+) -> Result<(String, String)> {
+    let latest_download =
+        format!("https://github.com/{}/releases/latest/download/{asset}", cfg.mcp.repo);
+    match probe_release_tag_via_redirect(&latest_download) {
+        Ok(tag) => Ok((
+            tag.clone(),
+            release_download_url(&cfg.mcp.repo, &tag, asset),
+        )),
+        Err(probe_err) => {
+            tracing::debug!(
+                target: "agent_brain::auto_update",
+                error = %probe_err,
+                "release redirect probe failed; falling back to GitHub API"
+            );
+            let release = fetch_latest_release(&cfg.mcp.repo).with_context(|| {
+                format!(
+                    "fetch latest GitHub release for `{}` (check auto_update.mcp.repo in ~/.agent_brain/config.yaml)",
+                    cfg.mcp.repo
+                )
+            })?;
+            let asset = resolve_release_asset(target, &release)?;
+            Ok((
+                release.tag_name.clone(),
+                release_download_url(&cfg.mcp.repo, &release.tag_name, &asset),
+            ))
+        }
+    }
+}
+
+fn probe_release_tag_via_redirect(latest_download_url: &str) -> Result<String> {
+    let location = curl_first_redirect_location(latest_download_url)?;
+    parse_release_tag_from_github_location(&location).with_context(|| {
+        format!("parse release tag from GitHub redirect: {location}")
+    })
+}
+
+/// Tag from `https://github.com/{owner}/{repo}/releases/download/{tag}/{asset}`.
+pub fn parse_release_tag_from_github_location(location: &str) -> Option<String> {
+    const MARKER: &str = "/releases/download/";
+    let rest = location.find(MARKER).map(|idx| &location[idx + MARKER.len()..])?;
+    let tag = rest.split('/').next().filter(|s| !s.is_empty())?;
+    Some(tag.to_string())
+}
+
+fn curl_first_redirect_location(url: &str) -> Result<String> {
+    let output = Command::new("curl")
+        .args(["-fsS", "-o", "/dev/null", "-D", "-", url])
+        .output()
+        .context("spawn curl")?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        bail!("curl HEAD failed for {url} ({}): {stderr}", output.status);
+    }
+    let headers = String::from_utf8_lossy(&output.stdout);
+    for line in headers.lines() {
+        let trimmed = line.trim();
+        if trimmed.len() > 9 && trimmed[..9].eq_ignore_ascii_case("location:") {
+            return Ok(trimmed[9..].trim().to_string());
+        }
+    }
+    bail!("no redirect location in GitHub response for {url}");
+}
+
 fn fetch_latest_release(repo: &str) -> Result<GhRelease> {
     let url = format!("https://api.github.com/repos/{repo}/releases/latest");
     let body = curl_github_api(&url)?;
@@ -493,14 +555,52 @@ fn resolve_release_asset(target: &str, release: &GhRelease) -> Result<String> {
 }
 
 fn curl_github_api(url: &str) -> Result<String> {
-    curl_stdout(&[
+    let auth = github_api_token();
+    let auth_header = auth.as_ref().map(|token| format!("Bearer {token}"));
+    let mut args: Vec<&str> = vec![
         "-fsSL",
         "-H",
         "Accept: application/vnd.github+json",
         "-H",
         "User-Agent: agent-brain",
-        url,
-    ])
+    ];
+    if let Some(ref header) = auth_header {
+        args.push("-H");
+        args.push(header.as_str());
+    }
+    args.push(url);
+    curl_stdout(&args).map_err(|err| enrich_github_api_error(err, url, auth.is_some()))
+}
+
+fn github_api_token() -> Option<String> {
+    for key in ["GITHUB_TOKEN", "GH_TOKEN", "GITHUB_PERSONAL_ACCESS_TOKEN"] {
+        if let Ok(val) = std::env::var(key) {
+            let trimmed = val.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
+            }
+        }
+    }
+    None
+}
+
+fn enrich_github_api_error(err: anyhow::Error, url: &str, authenticated: bool) -> anyhow::Error {
+    let msg = err.to_string();
+    let rate_limited = msg.contains("403")
+        && (msg.contains("rate limit")
+            || msg.contains("API rate limit exceeded")
+            || msg.contains("secondary rate limit"));
+    if !rate_limited {
+        return err;
+    }
+    let hint = if authenticated {
+        "GitHub API rate limit exceeded. Wait a few minutes and retry `agent-brain update --force`."
+    } else {
+        "GitHub API rate limit exceeded (unauthenticated). \
+         Updates normally use release redirects and avoid the API; this fallback only runs when redirect probing fails. \
+         Set GITHUB_TOKEN or GH_TOKEN (public repo read is enough) and retry."
+    };
+    anyhow::anyhow!("curl failed for {url}: {msg}\n{hint}")
 }
 
 fn curl_stdout(args: &[&str]) -> Result<String> {
@@ -530,7 +630,7 @@ fn curl_download(url: &str, dest: &Path) -> Result<()> {
         .context("spawn curl download")?;
     if !status.success() {
         bail!(
-            "curl download failed (HTTP 404?) for {url}\n\
+            "curl download failed for {url}\n\
              Check auto_update.mcp.repo in ~/.agent_brain/config.yaml and that the release finished publishing."
         );
     }
@@ -697,5 +797,22 @@ mod tests {
             ..Default::default()
         };
         assert!(!should_check_mcp(&cfg, &state, AutoUpdateRunOptions::cli()));
+    }
+
+    #[test]
+    fn parse_release_tag_from_redirect_location() {
+        let loc = "https://github.com/aeswibon/agent-brain/releases/download/v0.16.0/agent-brain-aarch64-apple-darwin";
+        assert_eq!(
+            parse_release_tag_from_github_location(loc).as_deref(),
+            Some("v0.16.0")
+        );
+    }
+
+    #[test]
+    fn github_api_token_reads_standard_env_keys() {
+        std::env::set_var("GH_TOKEN", "gh_test");
+        assert_eq!(github_api_token().as_deref(), Some("gh_test"));
+        std::env::remove_var("GH_TOKEN");
+        assert!(github_api_token().is_none());
     }
 }

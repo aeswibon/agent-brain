@@ -567,7 +567,7 @@ cargo build --release -p agent-brain
 python3 agent-brain/hooks/test_route_gate.py
 ```
 
-On macOS, release CI artifacts and `install.sh` adhoc-sign binaries; local builds need `make release-macos` or `agent-brain doctor --fix`.
+On macOS, release CI artifacts and `install.sh` adhoc-sign binaries; local builds need `make release-macos` or `agent-brain doctor --fix`. If Cursor blocks MCP after a browser download, run `xattr -cr ~/.local/bin/agent-brain && codesign --force --sign - ~/.local/bin/agent-brain`.
 
 ---
 

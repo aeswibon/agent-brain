@@ -77,6 +77,8 @@ When enabled, MCP `serve` checks for updates in the background (packages via `gi
 
 Run manually with `agent-brain update --force` (CLI updates disk only; toggle MCP in Settings if `serve` is already running).
 
+If redirect probing fails and the GitHub API fallback hits a **403 rate limit**, set `GITHUB_TOKEN` or `GH_TOKEN` (public repo read is enough) and retry.
+
 Environment overrides: `AGENT_BRAIN_AUTO_UPDATE`, `AGENT_BRAIN_AUTO_UPDATE_PACKAGES`, `AGENT_BRAIN_AUTO_UPDATE_MCP`, `AGENT_BRAIN_AUTO_UPDATE_INTERVAL_HOURS`, `AGENT_BRAIN_AUTO_UPDATE_DELAY_SEC`.
 
 ## Install MCP server

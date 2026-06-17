@@ -89,6 +89,7 @@ pub fn run(fix: bool) -> Result<()> {
     for path in unique_existing_paths(sign_targets) {
         let status = assess_signature(&path);
         let gate = gatekeeper_allows(&path);
+        let quarantine = macos_has_quarantine_attrs(&path);
         let gate_note = if gate {
             " · Gatekeeper OK"
         } else if status == SignatureStatus::Ok {
@@ -102,7 +103,14 @@ pub fn run(fix: bool) -> Result<()> {
             status,
             gate_note
         );
-        if status != SignatureStatus::Ok {
+        if quarantine {
+            println!(
+                "  quarantine xattrs:     present on {} (Cursor may SIGKILL until cleared)",
+                path.display()
+            );
+            ok = false;
+        }
+        if status != SignatureStatus::Ok || quarantine {
             ok = false;
             if fix {
                 adhoc_sign(&path).with_context(|| format!("sign {}", path.display()))?;
@@ -121,9 +129,18 @@ pub fn run(fix: bool) -> Result<()> {
                     after,
                     after_gate_note
                 );
-                if after == SignatureStatus::Ok {
+                if after == SignatureStatus::Ok && !macos_has_quarantine_attrs(&path) {
                     ok = true;
                 }
+            } else if quarantine {
+                println!(
+                    "                         run: xattr -cr {} && codesign --force --sign - {}",
+                    path.display(),
+                    path.display()
+                );
+                println!("                         or: agent-brain doctor --fix");
+            } else if status != SignatureStatus::Ok {
+                println!("                         run: agent-brain doctor --fix");
             }
         }
     }
@@ -173,6 +190,7 @@ pub fn run(fix: bool) -> Result<()> {
     println!("  • Only Cursor has hook enforcement (route_gate); other hosts rely on instructions + MCP config");
     println!("  • Background auto-update during serve can exec a new binary after idle (see config auto_update.mcp.restart_after_update)");
     println!("  • macOS: linker-signed binaries are killed by taskgated — doctor --fix adhoc re-signs");
+    println!("  • macOS: browser/curl downloads add quarantine xattrs — xattr -cr + adhoc codesign before Cursor MCP");
     println!("  • spctl may reject adhoc local builds; that is OK if codesign shows adhoc, not linker-signed");
 
     if !ok {
@@ -300,6 +318,26 @@ pub fn gatekeeper_allows(path: &Path) -> bool {
     {
         let _ = path;
         true
+    }
+}
+
+/// Download quarantine blocks execution when Cursor (taskgated) spawns the MCP binary.
+pub fn macos_has_quarantine_attrs(path: &Path) -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("xattr")
+            .arg(&path.display().to_string())
+            .output()
+            .map(|o| {
+                let out = String::from_utf8_lossy(&o.stdout);
+                out.contains("com.apple.quarantine")
+            })
+            .unwrap_or(false)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = path;
+        false
     }
 }
 

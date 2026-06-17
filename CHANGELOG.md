@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.1] - 2026-06-17
+
+### Fixed
+
+- **MCP auto-update on macOS** — discover latest release via `releases/latest/download` redirect (no GitHub API rate limit). API fallback uses `GITHUB_TOKEN` / `GH_TOKEN` when set.
+- **macOS Gatekeeper on fresh install** — `install.sh` verifies codesign, no longer falls back to unsigned cargo build when release signing fails; `update` fails hard if post-download sign fails; `doctor` detects quarantine xattrs.
+
 ## [0.16.0] - 2026-06-17
 
 ### Added

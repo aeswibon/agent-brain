@@ -70,8 +70,21 @@ sign_macos_binary() {
   if [[ "$(uname -s)" != "Darwin" ]] || [[ ! -f "$bin" ]]; then
     return 0
   fi
+  if ! command -v codesign >/dev/null 2>&1; then
+    echo "ERROR: macOS requires Xcode Command Line Tools to run agent-brain under Cursor." >&2
+    echo "  xcode-select --install" >&2
+    echo "  Then run:" >&2
+    echo "    xattr -cr \"$bin\"" >&2
+    echo "    codesign --force --sign - \"$bin\"" >&2
+    return 1
+  fi
   xattr -cr "$bin"
   codesign --force --sign - "$bin"
+  if ! codesign --verify --verbose "$bin" >/dev/null 2>&1; then
+    echo "ERROR: codesign verify failed for $bin" >&2
+    return 1
+  fi
+  echo "macOS: cleared download quarantine and adhoc-signed $bin"
 }
 
 install_from_release() {
@@ -111,6 +124,9 @@ install_from_cargo() {
     exit 1
   fi
   cargo install --git "https://github.com/${REPO}" --locked --force agent-brain
+  local bin
+  bin="$(command -v agent-brain)"
+  sign_macos_binary "$bin"
 }
 
 ensure_path() {
@@ -127,7 +143,10 @@ main() {
   if [[ "$FROM_SOURCE" -eq 1 ]]; then
     install_from_cargo
   else
-    install_from_release || install_from_cargo
+    if ! install_from_release; then
+      echo "Release download failed; trying --from-source ..." >&2
+      install_from_cargo
+    fi
   fi
 
   ensure_path
@@ -163,6 +182,9 @@ main() {
       echo "  Next: agent-brain add @starter"
     fi
     echo "  Then: restart Cursor · enable MCP · agent-brain onboarding"
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+      echo "  macOS: if MCP is blocked, run: agent-brain doctor --fix"
+    fi
   fi
 }
 
