@@ -33,6 +33,10 @@ cargo run --release -p agent-brain -- skills-sh golden-probe --target 30
 
 # Refresh snapshot (rate-limited; ~20–40 min for 2000 skills)
 cargo run --release -p agent-brain -- skills-sh sync --target 2000 --merge --delay-ms 400 --write docs/benchmarks/skills-sh/snapshot.json
+
+# Upgrade metadata-only entries to full SKILL.md bodies (rate-limited)
+cargo run --release -p agent-brain -- skills-sh retry-failed --write docs/benchmarks/skills-sh/snapshot.json --delay-ms 200
+# then: fixture build && eval --skills-sh
 ```
 
 ## APIs used

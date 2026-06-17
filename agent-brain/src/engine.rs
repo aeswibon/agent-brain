@@ -352,8 +352,12 @@ impl Engine {
             .join()
             .map_err(|_| anyhow::anyhow!("bm25 prefilter thread panicked"))??;
 
-        // Always embed for route_task — BM25-only fast path drops semantic signal for all queries.
-        let (query_emb, embed_cache_hit, embed_us) = {
+        let use_bm25_fast_path =
+            self.config.bm25_fast_path_enabled && bm25.fast_path_eligible();
+
+        let (query_emb, embed_cache_hit, embed_us) = if use_bm25_fast_path {
+            (Vec::new(), false, 0)
+        } else {
             let embed_started = Instant::now();
             let (emb, hit) = self.embed_query(query, Some(message_fp))?;
             (emb, hit, embed_started.elapsed().as_micros() as u64)
@@ -375,7 +379,7 @@ impl Engine {
             repo_root,
             tags,
             boost_agents,
-            false,
+            use_bm25_fast_path,
             Some(phase),
             Some(&match_ctx),
         )?;
@@ -388,7 +392,7 @@ impl Engine {
             embed_us,
             score_us,
             embed_cache_hit,
-            false,
+            use_bm25_fast_path,
         ))
     }
 

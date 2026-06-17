@@ -6,7 +6,7 @@
 
 1. `agent-brain install --global` (binary + Cursor MCP config + enforcement rule)
 2. Restart Cursor and enable **agent-brain** under Settings → MCP
-3. Optional: `agent-brain add affaan-m/ecc`
+3. Optional: `agent-brain add @starter` or `@nextjs`
 
 After that, **you do not run `serve` or `index` daily.** Cursor starts the MCP server; agent-brain indexes on startup.
 

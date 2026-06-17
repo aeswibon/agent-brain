@@ -792,6 +792,33 @@ async fn main() -> Result<()> {
                         write_path.display()
                     );
                 }
+                "retry-failed" => {
+                    let write_path = flag_value(&args, "--write")
+                        .map(PathBuf::from)
+                        .unwrap_or_else(agent_brain::skills_sh::default_snapshot_path);
+                    let delay_ms = flag_value(&args, "--delay-ms")
+                        .and_then(|v| v.parse().ok())
+                        .unwrap_or(200);
+                    let max_retries = flag_value(&args, "--max")
+                        .and_then(|v| v.parse().ok());
+                    let download_attempts = flag_value(&args, "--download-attempts")
+                        .and_then(|v| v.parse().ok())
+                        .unwrap_or(2);
+                    let (snapshot, report) = agent_brain::skills_sh::retry_failed_downloads(
+                        &write_path,
+                        delay_ms,
+                        download_attempts,
+                        max_retries,
+                    )?;
+                    println!("{}", serde_json::to_string_pretty(&report)?);
+                    eprintln!(
+                        "Retry complete: {} upgraded, {} still metadata, {} total → {}",
+                        report.upgraded,
+                        report.still_metadata,
+                        snapshot.skills.len(),
+                        write_path.display()
+                    );
+                }
                 "golden-probe" => {
                     let fixture = flag_value(&args, "--fixture-db")
                         .map(PathBuf::from)
@@ -818,6 +845,7 @@ async fn main() -> Result<()> {
                 }
                 _ => {
                     eprintln!("Usage: agent-brain skills-sh sync [--target N] [--merge] [--manifest PATH] [--write PATH] [--delay-ms N] [--required-only]");
+                    eprintln!("       agent-brain skills-sh retry-failed [--write PATH] [--max N] [--delay-ms N]");
                     eprintln!("       agent-brain skills-sh golden-probe [--target N] [--fixture-db PATH] [--snapshot PATH] [--write PATH]");
                     std::process::exit(1);
                 }

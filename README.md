@@ -94,6 +94,8 @@ Reproducible proof artifacts live in [`docs/benchmarks/`](docs/benchmarks/). Reg
 
 **Curated skill packs:** `agent-brain registry list` · `agent-brain add @starter` — see [docs/registry/README.md](docs/registry/README.md).
 
+**Before/after (2000 skills):** [docs/blog/before-and-after-agent-brain.md](docs/blog/before-and-after-agent-brain.md) · [Team workflow](docs/TEAM-WORKFLOW.md)
+
 ---
 
 ## Complete setup (copy & paste)
@@ -142,6 +144,7 @@ Replace `/Users/you/.local/bin/agent-brain` with your path (`which agent-brain`)
 |---------|---------|---------|
 | `AGENT_BRAIN_ROUTE_GATE_SCOPE` | `brain_mcp` | Gate only agent-brain MCP tools (`all` = legacy strict mode) |
 | `AGENT_BRAIN_ROUTE_OFFLINE_SECS` | `1800` | After MCP disconnect, stop blocking other tools for 30m |
+| `AGENT_BRAIN_BM25_FAST_PATH` | `1` | Skip query embed when BM25 prefilter is strong (lower latency) |
 
 Or re-run (merges safely):
 

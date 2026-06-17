@@ -257,6 +257,64 @@ pub struct SyncReport {
     pub total_in_snapshot: usize,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct RetryFailedReport {
+    pub attempted: usize,
+    pub upgraded: usize,
+    pub still_metadata: usize,
+    pub total_in_snapshot: usize,
+}
+
+/// Re-download skills that were indexed from search metadata only.
+pub fn retry_failed_downloads(
+    snapshot_path: &Path,
+    delay_ms: u64,
+    download_max_attempts: u32,
+    max_retries: Option<usize>,
+) -> Result<(SkillsShSnapshot, RetryFailedReport)> {
+    let mut snapshot = load_snapshot(snapshot_path)?;
+    let mut upgraded = 0usize;
+    let mut still_metadata = 0usize;
+    let mut attempted = 0usize;
+
+    for i in 0..snapshot.skills.len() {
+        if snapshot.skills[i].indexed_from == "download" {
+            continue;
+        }
+        if max_retries.is_some_and(|m| attempted >= m) {
+            break;
+        }
+        attempted += 1;
+        let skill_id = snapshot.skills[i].id.clone();
+        let installs = snapshot.skills[i].installs;
+        match download_skill(&skill_id, download_max_attempts) {
+            Ok(mut record) => {
+                record.installs = installs.or(record.installs);
+                snapshot.skills[i] = record;
+                upgraded += 1;
+            }
+            Err(err) => {
+                tracing::warn!(skill_id = skill_id.as_str(), error = %err, "retry download failed");
+                still_metadata += 1;
+            }
+        }
+        if attempted % 50 == 0 {
+            write_snapshot(snapshot_path, &snapshot)?;
+            eprintln!("retry checkpoint: {} upgraded / {} attempted", upgraded, attempted);
+        }
+        std::thread::sleep(Duration::from_millis(delay_ms));
+    }
+
+    write_snapshot(snapshot_path, &snapshot)?;
+    let report = RetryFailedReport {
+        attempted,
+        upgraded,
+        still_metadata,
+        total_in_snapshot: snapshot.skills.len(),
+    };
+    Ok((snapshot, report))
+}
+
 /// Sync a snapshot from skills.sh (public search + download APIs).
 pub fn sync_snapshot(
     manifest: &SkillsShManifest,
