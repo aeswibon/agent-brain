@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.1] - 2026-06-17
+
+### Added
+
+- **`bench --mcp`** — end-to-end MCP latency report: `route_task`, `get_context`, token tools, graphify ingest/code_context.
+- **`bench --graphify [--full]`** — ingest + `route_task` `code_context` benchmarks at 100/1k/5k nodes.
+- **`proofs --ci`** — gates graphify 1k ingest (≤2s) and route p95 with `code_context` (≤65ms).
+
 ## [0.17.0] - 2026-06-17
 
 ### Added

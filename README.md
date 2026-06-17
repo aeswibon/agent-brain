@@ -120,6 +120,9 @@ Reproducible proof artifacts live in [`docs/benchmarks/`](docs/benchmarks/). Reg
 | skills.sh catalog | **2000 real** skills.sh skills | **50** | **1.00** (50/50) | ≥ 0.80 | `stage-skills-sh-eval.yml` |
 | Warm-route p95 (fixture) | 500 | — | **≤ 100 ms** | gated | `proofs --ci` |
 | ANN scale warm-route p95 | 1k / 5k / 10k | — | **≤ 50 ms** each | gated (1k CI) | `bench --scale --full` |
+| Graphify ingest | 1k nodes | — | **≤ 2 s** | gated (CI) | `bench --graphify` |
+| Graphify `code_context` route p95 | 1k nodes + 500 skills | — | **≤ 65 ms** | gated (CI) | `bench --graphify` |
+| MCP tool latency | 500 skills | route + context + token tools | see `bench --mcp` | informational | `bench --mcp` |
 | Turn-cache p95 (fixture) | 500 | — | **≤ 30 ms** | gated | `proofs --ci` |
 | Execution supervisor | 500 + `@supervisor` | 3 scenarios | skill **100%** · must_apply **100%** · savings **~99%** · p95 **≤ 100 ms** | gated | `proofs --ci` |
 | Token MCP tools | synthetic 2k-line file | 4 tools | **≥ 80%** savings vs full read | gated | `proofs --ci` |

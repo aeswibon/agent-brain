@@ -12,6 +12,20 @@ use super::types::{
 };
 
 pub fn ingest_repo(store: &BrainStore, home: &Path, repo_root: &Path) -> Result<IngestReport> {
+    let report = ingest_graph_at_path(store, repo_root)?;
+    let graph_path = repo_root.join("graphify-out").join("graph.json");
+    let graph_mtime = graph_path
+        .metadata()
+        .ok()
+        .and_then(|m| m.modified().ok())
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_millis() as i64);
+    touch_ingest(home, repo_root, graph_mtime)?;
+    Ok(report)
+}
+
+/// Parse `graphify-out/graph.json` and upsert into `brain.db` (no repos.json update).
+pub fn ingest_graph_at_path(store: &BrainStore, repo_root: &Path) -> Result<IngestReport> {
     let graph_path = repo_root.join("graphify-out").join("graph.json");
     if !graph_path.is_file() {
         bail!(
@@ -31,14 +45,6 @@ pub fn ingest_repo(store: &BrainStore, home: &Path, repo_root: &Path) -> Result<
 
     store.replace_code_graph(&repo_str, &nodes, &edges, now)?;
     store.bump_index_version()?;
-
-    let graph_mtime = graph_path
-        .metadata()
-        .ok()
-        .and_then(|m| m.modified().ok())
-        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .map(|d| d.as_millis() as i64);
-    touch_ingest(home, repo_root, graph_mtime)?;
 
     Ok(IngestReport {
         nodes: nodes.len(),

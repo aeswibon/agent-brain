@@ -956,7 +956,43 @@ async fn main() -> Result<()> {
             let ci = args.iter().any(|a| a == "--ci");
             let supervisor = args.iter().any(|a| a == "--supervisor");
             let scale = args.iter().any(|a| a == "--scale");
-            if supervisor {
+            let graphify = args.iter().any(|a| a == "--graphify");
+            let mcp = args.iter().any(|a| a == "--mcp");
+            if mcp {
+                let report = agent_brain::mcp_bench::run_mcp_bench()?;
+                println!("{}", serde_json::to_string_pretty(&report)?);
+                if let Some(path) = flag_value(&args, "--write") {
+                    let json = serde_json::to_string_pretty(&report)?;
+                    std::fs::write(&path, format!("{json}\n"))?;
+                }
+                if args.iter().any(|a| a == "--assert") {
+                    if let Err(err) = agent_brain::mcp_bench::assert_mcp_bench_gate(&report) {
+                        eprintln!("{err}");
+                        std::process::exit(1);
+                    }
+                }
+            } else if graphify {
+                let full = args.iter().any(|a| a == "--full");
+                let sizes: &[usize] = if full {
+                    agent_brain::graphify_bench::GRAPHIFY_SIZES
+                } else {
+                    &[1_000]
+                };
+                let report = agent_brain::graphify_bench::run_graphify_bench(sizes)?;
+                println!("{}", serde_json::to_string_pretty(&report)?);
+                if let Some(path) = flag_value(&args, "--write") {
+                    let json = serde_json::to_string_pretty(&report)?;
+                    std::fs::write(&path, format!("{json}\n"))?;
+                }
+                if args.iter().any(|a| a == "--assert") {
+                    if let Err(err) =
+                        agent_brain::graphify_bench::assert_graphify_bench_gate(&report)
+                    {
+                        eprintln!("{err}");
+                        std::process::exit(1);
+                    }
+                }
+            } else if supervisor {
                 let report = agent_brain::supervisor_bench::run_supervisor_bench()?;
                 println!("{}", serde_json::to_string_pretty(&report)?);
                 if let Some(path) = flag_value(&args, "--write") {
@@ -1015,6 +1051,8 @@ async fn main() -> Result<()> {
                 }
             } else {
                 eprintln!("Usage: agent-brain bench --ci");
+                eprintln!("       agent-brain bench --mcp [--assert] [--write PATH]");
+                eprintln!("       agent-brain bench --graphify [--full] [--assert] [--write PATH]");
                 eprintln!("       agent-brain bench --scale [--full] [--assert] [--write PATH]");
                 eprintln!("       agent-brain bench --supervisor [--assert] [--write PATH]");
                 eprintln!("       agent-brain bench --onnx [--fixture-db PATH] [--write PATH] [--assert-target]");
@@ -1128,6 +1166,8 @@ Usage:
   agent-brain digest --weekly                 Operator digest from retrieval_log
   agent-brain eval --ci [--live]                 Recall@3 gate (isolated fixture; --live uses brain.db)
   agent-brain bench --ci                         Latency gate on 500-skill fixture (isolated)
+  agent-brain bench --mcp [--assert]             Full MCP tool latency report (route, context, token tools, graphify)
+  agent-brain bench --graphify [--full] [--assert]  Graphify ingest + code_context route bench
   agent-brain bench --scale [--full] [--assert]  ANN scale bench at 1k/5k/10k (p95 ≤ 50ms)
   agent-brain bench --supervisor [--assert]      Supervisor skill/must_apply/savings bench
   agent-brain bench --onnx [--fixture-db PATH]   ONNX warm-route bench on fixture-2k.db (nightly)
