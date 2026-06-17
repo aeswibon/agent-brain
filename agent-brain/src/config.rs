@@ -29,6 +29,8 @@ pub struct Config {
     pub auto_update_startup_delay_secs: u64,
     /// Extra delay before background session ingest (after bootstrap).
     pub session_ingest_delay_secs: u64,
+    /// Re-ingest session digests on route_task when last ingest is older than this (seconds).
+    pub session_ingest_route_interval_secs: u64,
     pub ann_enabled: bool,
     pub ann_min_index: usize,
     pub ann_top_k: usize,
@@ -36,6 +38,10 @@ pub struct Config {
     pub route_briefing_enabled: bool,
     /// One-line route summary on stderr (visible in Cursor MCP output)
     pub route_briefing_stderr: bool,
+    /// Reject non-route_task MCP tools until route_task succeeds (all hosts).
+    pub mcp_gate_enabled: bool,
+    /// Seconds a successful route_task unlocks other agent-brain MCP tools.
+    pub mcp_gate_ttl_secs: u64,
 }
 
 impl Config {
@@ -87,8 +93,11 @@ impl Config {
             bootstrap_interval_secs: env_u64("AGENT_BRAIN_BOOTSTRAP_INTERVAL_SEC", 3600),
             auto_update_startup_delay_secs: env_u64("AGENT_BRAIN_AUTO_UPDATE_DELAY_SEC", 60),
             session_ingest_delay_secs: env_u64("AGENT_BRAIN_SESSION_INGEST_DELAY_SEC", 180),
+            session_ingest_route_interval_secs: env_u64("AGENT_BRAIN_SESSION_INGEST_ROUTE_INTERVAL", 300),
             route_briefing_enabled: env_bool("AGENT_BRAIN_ROUTE_BRIEFING", true),
             route_briefing_stderr: env_bool("AGENT_BRAIN_ROUTE_BRIEFING_STDERR", true),
+            mcp_gate_enabled: env_bool("AGENT_BRAIN_MCP_GATE", true),
+            mcp_gate_ttl_secs: env_u64("AGENT_BRAIN_MCP_GATE_TTL", 600),
             ann_enabled: env_bool("AGENT_BRAIN_ANN", true),
             ann_min_index: env_usize("AGENT_BRAIN_ANN_MIN_INDEX", crate::ann::DEFAULT_ANN_MIN_INDEX),
             ann_top_k: env_usize("AGENT_BRAIN_ANN_TOP_K", crate::ann::DEFAULT_ANN_TOP_K),
@@ -122,8 +131,11 @@ impl Config {
             bootstrap_interval_secs: 0,
             auto_update_startup_delay_secs: 0,
             session_ingest_delay_secs: 0,
+            session_ingest_route_interval_secs: 0,
             route_briefing_enabled: false,
             route_briefing_stderr: false,
+            mcp_gate_enabled: false,
+            mcp_gate_ttl_secs: 600,
             ann_enabled: true,
             ann_min_index: crate::ann::DEFAULT_ANN_MIN_INDEX,
             ann_top_k: crate::ann::DEFAULT_ANN_TOP_K,

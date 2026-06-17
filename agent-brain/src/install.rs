@@ -75,6 +75,24 @@ pub fn run(target: HostTarget, print_only: bool, reload: bool) -> Result<()> {
         }
     }
 
+    if let Err(err) = run_post_install_warmup(false) {
+        eprintln!("Warning: post-install index/session ingest: {err}");
+    }
+
+    Ok(())
+}
+
+/// Index skills/rules and ingest Cursor/OpenCode/Codex/Gemini session digests into brain.db.
+pub fn run_post_install_warmup(quiet: bool) -> Result<()> {
+    let config = crate::config::Config::load()?;
+    config.ensure_dirs()?;
+    let engine = crate::engine::Engine::new(config)?;
+    let (indexed, sessions) = engine.post_install_warmup()?;
+    if !quiet {
+        println!(
+            "Post-install brain: indexed {indexed} items · ingested {sessions} session digests (cursor/opencode/codex/gemini)"
+        );
+    }
     Ok(())
 }
 

@@ -188,7 +188,7 @@ pub fn run(fix: bool) -> Result<()> {
     println!("  • agent-brain dashboard --open — local HTML value dashboard (screenshot-friendly ROI)");
     println!("  • agent-brain onboarding — 5-minute getting started checklist");
     println!("  • agent-brain install --all --global — MCP + instructions for Cursor, OpenCode, Claude Code, VS Code");
-    println!("  • Only Cursor has hook enforcement (route_gate); other hosts rely on instructions + MCP config");
+    println!("  • Only Cursor has hook enforcement on host tools (Read/Shell); all hosts gate agent-brain MCP tools until route_task");
     println!("  • Background auto-update during serve can exec a new binary after idle (see config auto_update.mcp.restart_after_update)");
     println!("  • macOS: linker-signed binaries are killed by taskgated — doctor --fix adhoc re-signs");
     println!("  • macOS: browser/curl downloads add quarantine xattrs — xattr -cr + adhoc codesign before Cursor MCP");
@@ -205,6 +205,16 @@ pub fn run(fix: bool) -> Result<()> {
         println!("             Re-aligns MCP config, Cursor hooks, and macOS codesign/quarantine.");
         println!("             Restart Cursor after fix if hooks or MCP were stale.");
         std::process::exit(1);
+    }
+    if fix {
+        if let Ok((indexed, sessions)) = (|| {
+            let engine = crate::engine::Engine::new(config.clone())?;
+            engine.post_install_warmup()
+        })() {
+            println!(
+                "  post-fix index:        {indexed} items · {sessions} session digests ingested"
+            );
+        }
     }
     if let Ok(store) = crate::db::store::BrainStore::open(&config.db_path) {
         if let Ok(stats) = crate::stats::collect(&store, &config, 7) {

@@ -114,7 +114,7 @@ fn build_digest(source: &str, messages: &[String]) -> String {
 
     truncate_words(
         &format!(
-            "Session digest ({source}, {} turns): {}. Latest focus: {}",
+            "Retrieved only via route_task. Session digest ({source}, {} turns): {}. Latest focus: {}",
             messages.len(),
             topics.join(" | "),
             tail
@@ -175,8 +175,11 @@ mod tests {
             bootstrap_interval_secs: 0,
             auto_update_startup_delay_secs: 0,
             session_ingest_delay_secs: 0,
+            session_ingest_route_interval_secs: 0,
             route_briefing_enabled: false,
             route_briefing_stderr: false,
+            mcp_gate_enabled: false,
+            mcp_gate_ttl_secs: 600,
             ann_enabled: true,
             ann_min_index: 1_500,
             ann_top_k: 100,

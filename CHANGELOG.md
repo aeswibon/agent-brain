@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.3] - 2026-06-17
+
+### Added
+
+- **MCP turn gate (all hosts)** — agent-brain MCP tools except `route_task` return errors until `route_task` succeeds (`AGENT_BRAIN_MCP_GATE`, default on; TTL `AGENT_BRAIN_MCP_GATE_TTL`, default 600s).
+- **Connection contract** — MCP instructions and host `agent-brain.md` v3 explain that session digests and cross-agent memory only surface through `route_task`.
+- **Session digest prefix** — stored facts note they are retrieved only via `route_task`.
+- **Post-install warmup** — `install` indexes skills/rules and ingests session digests from Cursor/OpenCode/Codex/Gemini.
+- **Route-triggered ingest** — `route_task` refreshes stale session digests (default every 5 min, `AGENT_BRAIN_SESSION_INGEST_ROUTE_INTERVAL`).
+
+### Changed
+
+- **`route_task` warnings** — includes `mcp_contract` and `native_tools` steering on non-Cursor hosts.
+- **Host instructions v4** — explicit native Read/Grep avoidance; install/route refresh ingest note.
+- **`doctor --fix`** — re-indexes and re-ingests session digests after repair.
+
 ## [0.17.2] - 2026-06-17
 
 ### Added

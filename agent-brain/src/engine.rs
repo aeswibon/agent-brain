@@ -219,23 +219,81 @@ impl Engine {
             if delay > 0 {
                 std::thread::sleep(Duration::from_secs(delay));
             }
-            match crate::sessions::ingest_sessions(
-                &engine.store,
-                &engine.embedder,
-                &engine.config,
-            ) {
-                Ok(sessions) if sessions > 0 => {
+            if let Ok(sessions) = engine.run_session_ingest_sync() {
+                if sessions > 0 {
                     tracing::info!(
                         target: "agent_brain::sessions",
                         sessions,
                         "background session ingest complete"
                     );
-                    engine.store.bump_index_version().ok();
                 }
-                Ok(_) => {}
-                Err(err) => tracing::warn!(error = %err, "background session ingest failed"),
             }
         });
+    }
+
+    pub fn run_session_ingest_sync(&self) -> Result<usize> {
+        if !self.config.session_ingest_enabled {
+            return Ok(0);
+        }
+        let sessions =
+            crate::sessions::ingest_sessions(&self.store, &self.embedder, &self.config)?;
+        if sessions > 0 {
+            self.store.bump_index_version()?;
+        }
+        let now = chrono::Utc::now().timestamp().to_string();
+        let _ = self.store.set_meta("last_session_ingest_unix", &now);
+        Ok(sessions)
+    }
+
+    fn session_ingest_due(&self) -> bool {
+        let interval = self.config.session_ingest_route_interval_secs;
+        if interval == 0 {
+            return false;
+        }
+        let last = self
+            .store
+            .get_meta("last_session_ingest_unix")
+            .ok()
+            .flatten()
+            .and_then(|s| s.parse::<i64>().ok())
+            .unwrap_or(0);
+        chrono::Utc::now().timestamp() - last >= interval as i64
+    }
+
+    /// Background session ingest when stale — triggered from route_task so MCP use refreshes cross-agent digests.
+    pub fn maybe_spawn_session_ingest(&self) {
+        if !self.config.session_ingest_enabled || !self.session_ingest_due() {
+            return;
+        }
+        let store = Arc::clone(&self.store);
+        let embedder = Arc::clone(&self.embedder);
+        let config = self.config.clone();
+        std::thread::spawn(move || {
+            match crate::sessions::ingest_sessions(&store, &embedder, &config) {
+                Ok(sessions) if sessions > 0 => {
+                    store.bump_index_version().ok();
+                    let now = chrono::Utc::now().timestamp().to_string();
+                    let _ = store.set_meta("last_session_ingest_unix", &now);
+                    tracing::info!(
+                        target: "agent_brain::sessions",
+                        sessions,
+                        "route-triggered session ingest complete"
+                    );
+                }
+                Ok(_) => {
+                    let now = chrono::Utc::now().timestamp().to_string();
+                    let _ = store.set_meta("last_session_ingest_unix", &now);
+                }
+                Err(err) => tracing::warn!(error = %err, "route-triggered session ingest failed"),
+            }
+        });
+    }
+
+    /// Index skills/rules and ingest session digests — run after install or doctor --fix.
+    pub fn post_install_warmup(&self) -> Result<(usize, usize)> {
+        let indexed = index::sync_index(&self.store, &self.config, &self.embedder, None)?;
+        let sessions = self.run_session_ingest_sync()?;
+        Ok((indexed, sessions))
     }
 
     fn bootstrap_due(&self) -> bool {
@@ -412,6 +470,7 @@ impl Engine {
         limits: RouteLimits,
         explicit_phase: Option<&str>,
     ) -> Result<RouteTaskResponse> {
+        self.maybe_spawn_session_ingest();
         let limits = limits.normalize();
         let started = Instant::now();
         let ws = probe(cwd);
@@ -541,6 +600,16 @@ impl Engine {
             if let Ok(n) = self.store.count_indexed_items() {
                 resp.index_total = n;
             }
+        }
+        if self.config.mcp_gate_enabled {
+            resp.warnings.push(crate::types::RouteWarning {
+                topic: "mcp_contract".into(),
+                message: "Session digests (Cursor/OpenCode/Codex) and team memory surface only through route_task. Other agent-brain MCP tools are gated until route_task succeeds each turn.".into(),
+            });
+            resp.warnings.push(crate::types::RouteWarning {
+                topic: "native_tools".into(),
+                message: "Prefer agent-brain grep_search, file_summary, read_file_head, read_file_tail over host Read/Grep/Cat — host native tools bypass routing and cross-agent ingest.".into(),
+            });
         }
         if self.config.route_briefing_enabled {
             route_briefing::publish_briefing(

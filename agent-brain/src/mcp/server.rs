@@ -13,20 +13,27 @@ use serde::Deserialize;
 use crate::db::store::{looks_like_secret, word_count};
 use crate::db::write_queue::{store_memory_payload, WriteOp};
 use crate::engine::Engine;
+use crate::mcp::route_gate::McpRouteGate;
 use crate::types::{deserialize_route_limits, ItemType, RouteLimits};
 
 #[derive(Clone)]
 pub struct BrainMcp {
     engine: Arc<Engine>,
     tool_router: ToolRouter<Self>,
+    route_gate: Arc<McpRouteGate>,
 }
 
 impl BrainMcp {
     pub fn new(engine: Arc<Engine>) -> Self {
         Self {
+            route_gate: Arc::new(McpRouteGate::from_config(&engine.config)),
             engine,
             tool_router: Self::tool_router(),
         }
+    }
+
+    fn require_route(&self, tool: &str) -> Result<(), McpError> {
+        self.route_gate.require_route(tool)
     }
 }
 
@@ -257,7 +264,7 @@ struct GraphifyJobStatusParams {
 
 #[tool_router]
 impl BrainMcp {
-    #[tool(description = "REQUIRED every turn before planning or edits. Returns ranked agents, skills, rules, and memory under a token budget. Pass user_message, current_working_directory, and open_files.")]
+    #[tool(description = "REQUIRED every turn before planning or edits. Returns ranked agents, skills, rules, and memory under a token budget. Pass user_message, current_working_directory, and open_files. Session digests from Cursor/OpenCode/Codex and team memory are only injected here.")]
     async fn route_task(
         &self,
         params: Parameters<RouteTaskParams>,
@@ -279,14 +286,16 @@ impl BrainMcp {
                 p.phase.as_deref(),
             )
             .map_err(|e| McpError::internal_error(format!("{e}"), None))?;
+        self.route_gate.record_route(&p.user_message);
         json_result(resp)
     }
 
-    #[tool(description = "Lower-level flat context retrieval.")]
+    #[tool(description = "Lower-level flat context retrieval. Requires route_task first in this turn.")]
     async fn get_context(
         &self,
         params: Parameters<GetContextParams>,
     ) -> Result<CallToolResult, McpError> {
+        self.require_route("get_context")?;
         let _req = self.engine.mcp_activity.begin_request();
         let p = params.0;
         let cwd = p
@@ -310,11 +319,12 @@ impl BrainMcp {
         json_result(resp)
     }
 
-    #[tool(description = "REQUIRED at task end for durable decisions. Max 50 words. No secrets.")]
+    #[tool(description = "REQUIRED at task end for durable decisions. Max 50 words. No secrets. Requires route_task first in this turn.")]
     async fn store_memory(
         &self,
         params: Parameters<StoreMemoryParams>,
     ) -> Result<CallToolResult, McpError> {
+        self.require_route("store_memory")?;
         let _req = self.engine.mcp_activity.begin_request();
         let p = params.0;
         if looks_like_secret(&p.fact) {
@@ -363,6 +373,7 @@ impl BrainMcp {
         &self,
         params: Parameters<ListMemoryParams>,
     ) -> Result<CallToolResult, McpError> {
+        self.require_route("list_memory")?;
         let _req = self.engine.mcp_activity.begin_request();
         let facts = self
             .engine
@@ -377,6 +388,7 @@ impl BrainMcp {
         &self,
         params: Parameters<DeleteMemoryParams>,
     ) -> Result<CallToolResult, McpError> {
+        self.require_route("delete_memory")?;
         let _req = self.engine.mcp_activity.begin_request();
         let p = params.0;
         let (tx, rx) = std::sync::mpsc::channel();
@@ -402,6 +414,7 @@ impl BrainMcp {
         &self,
         params: Parameters<ExportMemoryParams>,
     ) -> Result<CallToolResult, McpError> {
+        self.require_route("export_memory")?;
         let _req = self.engine.mcp_activity.begin_request();
         let filename = params.0.filename.unwrap_or_else(|| {
             format!("export-{}.json", chrono::Utc::now().timestamp())
@@ -420,6 +433,7 @@ impl BrainMcp {
         &self,
         params: Parameters<ReportContextUsefulParams>,
     ) -> Result<CallToolResult, McpError> {
+        self.require_route("report_context_useful")?;
         let _req = self.engine.mcp_activity.begin_request();
         let p = params.0;
         let updated = self
@@ -439,6 +453,7 @@ impl BrainMcp {
         &self,
         params: Parameters<ExplainLastContextParams>,
     ) -> Result<CallToolResult, McpError> {
+        self.require_route("explain_last_context")?;
         let _req = self.engine.mcp_activity.begin_request();
         let explain = crate::observability::explain_last(
             &self.engine.store,
@@ -453,6 +468,7 @@ impl BrainMcp {
         &self,
         params: Parameters<ImportMemoryParams>,
     ) -> Result<CallToolResult, McpError> {
+        self.require_route("import_memory")?;
         let _req = self.engine.mcp_activity.begin_request();
         let p = params.0;
         let policy = crate::sync::MergePolicy::parse(&p.merge_policy)
@@ -474,6 +490,7 @@ impl BrainMcp {
         &self,
         params: Parameters<RouteToMcpParams>,
     ) -> Result<CallToolResult, McpError> {
+        self.require_route("route_to_mcp")?;
         let started = std::time::Instant::now();
         let _req = self.engine.mcp_activity.begin_request();
         let p = params.0;
@@ -531,6 +548,7 @@ impl BrainMcp {
         &self,
         params: Parameters<PromoteToSkillParams>,
     ) -> Result<CallToolResult, McpError> {
+        self.require_route("promote_to_skill")?;
         let _req = self.engine.mcp_activity.begin_request();
         let p = params.0;
         if p.fact_id.is_none() && p.topic.is_none() {
@@ -561,6 +579,7 @@ impl BrainMcp {
         &self,
         params: Parameters<TokenToolPathParams>,
     ) -> Result<CallToolResult, McpError> {
+        self.require_route("file_summary")?;
         let _req = self.engine.mcp_activity.begin_request();
         let p = params.0;
         let cwd = p.current_working_directory.as_ref().map(PathBuf::from);
@@ -577,6 +596,7 @@ impl BrainMcp {
         &self,
         params: Parameters<ReadFileBoundedParams>,
     ) -> Result<CallToolResult, McpError> {
+        self.require_route("read_file_head")?;
         let _req = self.engine.mcp_activity.begin_request();
         let p = params.0;
         let cwd = p.current_working_directory.as_ref().map(PathBuf::from);
@@ -599,6 +619,7 @@ impl BrainMcp {
         &self,
         params: Parameters<ReadFileBoundedParams>,
     ) -> Result<CallToolResult, McpError> {
+        self.require_route("read_file_tail")?;
         let _req = self.engine.mcp_activity.begin_request();
         let p = params.0;
         let cwd = p.current_working_directory.as_ref().map(PathBuf::from);
@@ -621,6 +642,7 @@ impl BrainMcp {
         &self,
         params: Parameters<GrepSearchParams>,
     ) -> Result<CallToolResult, McpError> {
+        self.require_route("grep_search")?;
         let _req = self.engine.mcp_activity.begin_request();
         let p = params.0;
         let cwd = p.current_working_directory.as_ref().map(PathBuf::from);
@@ -644,6 +666,7 @@ impl BrainMcp {
         &self,
         params: Parameters<QueryCodebaseParams>,
     ) -> Result<CallToolResult, McpError> {
+        self.require_route("query_codebase")?;
         let _req = self.engine.mcp_activity.begin_request();
         let p = params.0;
         let repo = resolve_graphify_repo(p.current_working_directory.as_deref())?;
@@ -663,6 +686,7 @@ impl BrainMcp {
         &self,
         params: Parameters<TriggerDeepAnalysisParams>,
     ) -> Result<CallToolResult, McpError> {
+        self.require_route("trigger_deep_analysis")?;
         let _req = self.engine.mcp_activity.begin_request();
         let p = params.0;
         let repo = resolve_graphify_repo(p.repo_root.as_deref())?;
@@ -691,6 +715,7 @@ impl BrainMcp {
         &self,
         params: Parameters<GraphifyJobStatusParams>,
     ) -> Result<CallToolResult, McpError> {
+        self.require_route("graphify_job_status")?;
         let _req = self.engine.mcp_activity.begin_request();
         let p = params.0;
         let status = crate::graphify::job_status(&self.engine, &p.job_id)
@@ -744,10 +769,12 @@ impl ServerHandler for BrainMcp {
         let mut info = ServerInfo::default();
         info.instructions = Some(
             "agent-brain is the routing layer for this session. \
-             REQUIRED: call route_task at the start of every user turn before choosing skills, rules, or agents. \
+             REQUIRED: call route_task at the start of every user turn before any other agent-brain tool. \
+             Skills, rules, session digests (Cursor/OpenCode/Codex/Gemini), and team memory are injected ONLY through route_task — \
+             other agent-brain tools return errors until route_task succeeds. \
              Use returned paths to load skills; apply applicable_rules and must_apply. \
              For file inspection prefer token-efficient tools: grep_search, file_summary, read_file_head, read_file_tail — not full-file reads. \
-             When exploring code architecture in a repo with graphify enabled, use query_codebase for dependency navigation (after graphify enable + ingest). \
+             When exploring code architecture in a repo with graphify enabled, use query_codebase after route_task. \
              At task end, call store_memory for durable outcomes (max 50 words). \
              Do not bypass this server when its tools are available."
                 .into(),

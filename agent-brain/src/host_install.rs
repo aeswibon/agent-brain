@@ -308,33 +308,46 @@ fn write_host_instructions(path: &Path, content: &str, quiet: bool, label: &str)
     Ok(())
 }
 
-const HOST_INSTRUCTIONS_VERSION: &str = "2";
+const HOST_INSTRUCTIONS_VERSION: &str = "4";
 
 const HOST_AGENT_BRAIN_INSTRUCTIONS: &str = r#"# agent-brain MCP (required)
-instructions-version: 2
+instructions-version: 4
 
-At the start of **every user turn**, call the **agent-brain** MCP tool **`route_task`**
-with `user_message`, `current_working_directory`, and `open_files` when known.
+## The connection contract
 
-- Load skills/agents from `recommended_skills` / `recommended_agents` paths.
-- Apply `applicable_rules` and `must_apply`.
-- Use `relevant_memory` for project conventions and recent decisions.
-- At task end, call **`store_memory`** for durable outcomes (max 50 words, no secrets).
+**route_task is the only entry point** for agent-brain context on every host.
 
-Do **not** skip `route_task`. Do **not** guess routing from stale context when agent-brain is available.
+- Session digests from Cursor, OpenCode, Codex, and Gemini are stored in brain.db but **only surface through route_task**.
+- Team memory, skills, rules, and must_apply constraints are **only injected through route_task**.
+- Other agent-brain MCP tools (`grep_search`, `store_memory`, `get_context`, …) **return errors** until route_task succeeds for this turn.
+- **Install and route_task refresh session ingests** — cross-agent threads are indexed into brain.db automatically.
 
-## Continuing work (including from another IDE)
+If the agent skips route_task, cross-agent ingest and shared memory provide **zero value**.
 
-This host does **not** share chat history with Cursor or other IDEs. When the user says
-"continue", "same as before", or references work done elsewhere:
+## Every user turn
 
-1. Call **`route_task`** first — `relevant_memory` may include session digests and stored facts.
-2. Read **`agent-brain briefing`** or `~/.agent_brain/logs/last-route.md` for the last routed task.
-3. Treat the message as steering an **in-progress task**, not a new unrelated task, unless the user clearly changes direction.
-4. If context is thin, ask one clarifying question — do not silently pivot to a different feature.
+1. Call **`route_task`** with `user_message`, `current_working_directory`, and `open_files`.
+2. Load skills/agents from returned paths; apply `applicable_rules` and `must_apply`.
+3. Use `relevant_memory` (includes session digests when relevant).
+4. At task end, call **`store_memory`** for durable outcomes (max 50 words, no secrets).
 
-Session digests from Cursor/Codex/Gemini/OpenCode are ingested into the same brain when MCP runs.
-Run `agent-brain sessions ingest --source cursor` if you need the latest Cursor thread indexed.
+## Native host tools (OpenCode / Claude Code / VS Code)
+
+This host has **no hook gate** on Read/Shell/Grep. You must self-enforce:
+
+- **Do not** use host Read/Cat/Grep for file exploration when agent-brain MCP is connected.
+- **Use** agent-brain `grep_search`, `file_summary`, `read_file_head`, `read_file_tail` instead.
+- Host native reads bypass routing, token savings, and cross-agent session digests.
+
+On Cursor, hooks block host tools until route_task; here **you** must follow the same discipline.
+
+## Continuing work from another IDE
+
+When the user says "continue" or references work elsewhere:
+
+1. Call **`route_task`** first — digests and memory may already describe the in-progress task.
+2. Read **`agent-brain briefing`** or `~/.agent_brain/logs/last-route.md`.
+3. Treat as in-progress work unless the user clearly changes direction.
 
 Readable summary: `~/.agent_brain/logs/last-route.md` or `agent-brain briefing`.
 "#;
