@@ -370,7 +370,7 @@ fn stats_collects_token_savings_from_retrieval_log() {
     assert_eq!(snapshot.period.routes_with_savings, 1);
     assert!(snapshot.period.avg_saved_pct >= 95.0);
     assert!(snapshot.period.total_saved_tokens > 0);
-    assert!(stats::format_summary_line(&snapshot).contains("token savings"));
+    assert!(stats::format_summary_line(&snapshot).contains("tok saved"));
 }
 
 #[test]

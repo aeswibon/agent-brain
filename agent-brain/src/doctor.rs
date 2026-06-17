@@ -185,6 +185,7 @@ pub fn run(fix: bool) -> Result<()> {
     println!("Tips:");
     println!("  • agent-brain briefing — readable route + estimated token savings vs full index");
     println!("  • agent-brain stats — index size, savings, latency, adoption milestones");
+    println!("  • agent-brain dashboard --open — local HTML value dashboard (screenshot-friendly ROI)");
     println!("  • agent-brain onboarding — 5-minute getting started checklist");
     println!("  • agent-brain install --all --global — MCP + instructions for Cursor, OpenCode, Claude Code, VS Code");
     println!("  • Only Cursor has hook enforcement (route_gate); other hosts rely on instructions + MCP config");
@@ -195,8 +196,14 @@ pub fn run(fix: bool) -> Result<()> {
 
     if !ok {
         if fix {
+            println!();
+            println!("doctor --fix finished; review any remaining issues above.");
             bail!("doctor --fix completed with remaining issues");
         }
+        println!();
+        println!("Self-heal:  agent-brain doctor --fix");
+        println!("             Re-aligns MCP config, Cursor hooks, and macOS codesign/quarantine.");
+        println!("             Restart Cursor after fix if hooks or MCP were stale.");
         std::process::exit(1);
     }
     if let Ok(store) = crate::db::store::BrainStore::open(&config.db_path) {

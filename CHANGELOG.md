@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.2] - 2026-06-17
+
+### Added
+
+- **`agent-brain dashboard [--days N] [--open]`** — local HTML value dashboard: combined token savings, estimated API cost, memories committed, full-read steers.
+- **ROI section in `stats`** — `value` block with combined savings and cost estimate ($3/1M input tokens ballpark).
+
+### Changed
+
+- **`doctor`** — prints self-heal instructions when issues remain (`doctor --fix` re-aligns MCP, hooks, codesign).
+- **MCP instructions** — graphify guidance for `query_codebase` when code graph is ingested.
+- **CI** — serial `cargo test` (`--test-threads=1`) to stabilize timing-sensitive bench gates.
+- **OpenCode / Claude Code instructions v2** — cross-host continuity guidance; auto-upgrades on `install --opencode` when instructions are stale.
+
 ## [0.17.1] - 2026-06-17
 
 ### Added

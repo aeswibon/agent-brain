@@ -729,6 +729,21 @@ async fn main() -> Result<()> {
                 print!("{}", agent_brain::stats::format_text(&snapshot));
             }
         }
+        "dashboard" => {
+            let days = flag_value(&args, "--days")
+                .and_then(|v| v.parse::<u32>().ok())
+                .unwrap_or(7);
+            let open = args.iter().any(|a| a == "--open");
+            let config = Config::load()?;
+            config.ensure_dirs()?;
+            let store = agent_brain::db::store::BrainStore::open(&config.db_path)?;
+            let snapshot = agent_brain::stats::collect(&store, &config, days)?;
+            let path = agent_brain::dashboard::write_dashboard_html(&config.home, &snapshot)?;
+            println!("Dashboard written: {}", path.display());
+            if open {
+                open_dashboard_in_browser(&path)?;
+            }
+        }
         "eval" => {
             let live = args.iter().any(|a| a == "--live");
             let skills_sh = args.iter().any(|a| a == "--skills-sh");
@@ -1097,6 +1112,25 @@ fn flag_value(args: &[String], flag: &str) -> Option<String> {
         .cloned()
 }
 
+fn open_dashboard_in_browser(path: &std::path::Path) -> Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open").arg(path).status()?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let _ = std::process::Command::new("xdg-open").arg(path).status();
+    }
+    #[cfg(windows)]
+    {
+        std::process::Command::new("cmd")
+            .args(["/C", "start", ""])
+            .arg(path)
+            .status()?;
+    }
+    Ok(())
+}
+
 fn parse_session_sources(args: &[String]) -> Result<Vec<agent_brain::sessions::SessionSource>> {
     let Some(raw) = flag_value(args, "--source") else {
         return Ok(Vec::new());
@@ -1141,6 +1175,7 @@ Usage:
   agent-brain suggest-memory [approve|reject] Show or promote hook anti-pattern to store_memory
   agent-brain graphify enable|disable|status|ingest|run|query  Graphify orchestration (codebase graph)
   agent-brain stats [--days N] [--json]       Index, routing, token savings, adoption milestones
+  agent-brain dashboard [--days N] [--open]   Local HTML value dashboard (token ROI, memories)
   agent-brain digest --weekly                 Operator digest from retrieval_log
   agent-brain onboarding                      USP + 5-minute getting started checklist
   agent-brain export [dir]                    Export sync bundle (manifest + facts.jsonl)

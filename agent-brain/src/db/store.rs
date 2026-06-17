@@ -571,6 +571,18 @@ impl BrainStore {
         Ok(n as usize)
     }
 
+    /// Facts inserted since `since_ms` (includes superseded rows — each store counts as a commit).
+    pub fn count_facts_created_since(&self, since_ms: i64) -> Result<usize> {
+        self.with_conn(|conn| {
+            let n: i64 = conn.query_row(
+                "SELECT COUNT(*) FROM facts WHERE created_at >= ?1",
+                params![since_ms],
+                |r| r.get(0),
+            )?;
+            Ok(n.max(0) as usize)
+        })
+    }
+
     pub fn count_indexed_by_type(&self) -> Result<Vec<(String, usize)>> {
         self.with_conn(|conn| {
             let mut stmt =

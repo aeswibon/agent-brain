@@ -747,6 +747,7 @@ impl ServerHandler for BrainMcp {
              REQUIRED: call route_task at the start of every user turn before choosing skills, rules, or agents. \
              Use returned paths to load skills; apply applicable_rules and must_apply. \
              For file inspection prefer token-efficient tools: grep_search, file_summary, read_file_head, read_file_tail — not full-file reads. \
+             When exploring code architecture in a repo with graphify enabled, use query_codebase for dependency navigation (after graphify enable + ingest). \
              At task end, call store_memory for durable outcomes (max 50 words). \
              Do not bypass this server when its tools are available."
                 .into(),

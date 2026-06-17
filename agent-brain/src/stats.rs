@@ -11,6 +11,9 @@ use crate::adoption::{self, AdoptionMilestones};
 use crate::config::Config;
 use crate::db::store::{BrainStore, RetrievalStats};
 
+/// Rough USD per 1M input tokens (Sonnet-class ballpark for ROI estimates).
+pub const INPUT_TOKEN_USD_PER_MILLION: f64 = 3.0;
+
 #[derive(serde::Deserialize)]
 struct StoredProofReport {
     generated_at: String,
@@ -52,10 +55,19 @@ pub struct ProofSnapshot {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct ValueSummary {
+    pub combined_tokens_saved: u64,
+    pub estimated_api_cost_usd: f64,
+    pub memories_committed: usize,
+    pub blocked_full_reads: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct OperatorStats {
     pub period_days: u32,
     pub index: IndexBreakdown,
     pub period: RetrievalStats,
+    pub value: ValueSummary,
     pub adoption: AdoptionMilestones,
     pub proof: Option<ProofSnapshot>,
 }
@@ -77,13 +89,37 @@ pub fn collect(store: &BrainStore, config: &Config, period_days: u32) -> Result<
     };
     let adoption = adoption::load_milestones(store)?;
     let proof = load_proof_snapshot(&config.home);
+    let combined_tokens_saved = period
+        .total_saved_tokens
+        .saturating_add(period.tool_tokens_saved);
+    let value = ValueSummary {
+        combined_tokens_saved,
+        estimated_api_cost_usd: estimate_cost_usd(combined_tokens_saved),
+        memories_committed: store.count_facts_created_since(since)?,
+        blocked_full_reads: period.inefficient_read_events,
+    };
     Ok(OperatorStats {
         period_days,
         index,
         period,
+        value,
         adoption,
         proof,
     })
+}
+
+pub fn estimate_cost_usd(tokens_saved: u64) -> f64 {
+    tokens_saved as f64 / 1_000_000.0 * INPUT_TOKEN_USD_PER_MILLION
+}
+
+pub fn format_tokens_short(n: u64) -> String {
+    if n >= 1_000_000 {
+        format!("{:.1}M", n as f64 / 1_000_000.0)
+    } else if n >= 1_000 {
+        format!("{:.1}K", n as f64 / 1_000.0)
+    } else {
+        n.to_string()
+    }
 }
 
 pub fn load_proof_snapshot(home: &Path) -> Option<ProofSnapshot> {
@@ -167,6 +203,18 @@ pub fn format_text(stats: &OperatorStats) -> String {
         ));
     }
 
+    out.push_str("\n## Value (period)\n\n");
+    out.push_str(&format!(
+        "- Combined token savings: ~{} tokens (route + tools)\n- Estimated API cost avoided: ${:.2}\n- Memories committed: {}\n- Full-read steers: {}\n",
+        format_tokens_short(stats.value.combined_tokens_saved),
+        stats.value.estimated_api_cost_usd,
+        stats.value.memories_committed,
+        stats.value.blocked_full_reads,
+    ));
+    if stats.period.route_calls == 0 && stats.value.combined_tokens_saved == 0 {
+        out.push_str("- Tip: run Agent mode once so route_task logs savings, then refresh with `agent-brain dashboard --open`\n");
+    }
+
     out.push_str("\n## Adoption (local)\n\n");
     out.push_str(&format!(
         "- Installed: {}\n- First route: {}\n- Starter pack: {}\n- Supervisor pack: {}\n",
@@ -201,8 +249,16 @@ pub fn format_summary_line(stats: &OperatorStats) -> String {
             stats.period_days
         );
     }
-    let savings = if stats.period.routes_with_savings > 0 {
-        format!("~{:.0}% token savings", stats.period.avg_saved_pct)
+    let savings = if stats.period.routes_with_savings > 0 || stats.value.combined_tokens_saved > 0 {
+        if stats.value.combined_tokens_saved > 0 {
+            format!(
+                "~{} tok saved (~${:.2})",
+                format_tokens_short(stats.value.combined_tokens_saved),
+                stats.value.estimated_api_cost_usd
+            )
+        } else {
+            format!("~{:.0}% token savings", stats.period.avg_saved_pct)
+        }
     } else {
         "savings pending".into()
     };
