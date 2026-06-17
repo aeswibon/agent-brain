@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-06-17
+
+### Added
+
+- **In-memory ANN top-K** — hybrid BM25 ∪ vector retrieval when index ≥ 1,500 items (`AGENT_BRAIN_ANN`, `AGENT_BRAIN_ANN_MIN_INDEX`, `AGENT_BRAIN_ANN_TOP_K`).
+- **Scale benchmarks** — `agent-brain bench --scale [--full]` at 1k/5k/10k skills; p95 ≤ 50ms gate.
+- **CI scale proof** — `proofs --ci` gates 1k ANN warm-route latency.
+
+### Changed
+
+- **Search cache** — builds flat ANN index alongside `SearchIndexCache` on snapshot refresh.
+
 ## [0.15.0] - 2026-06-17
 
 ### Added

@@ -37,6 +37,9 @@ fn test_config(dir: &TempDir) -> Config {
         session_ingest_delay_secs: 0,
         route_briefing_enabled: false,
         route_briefing_stderr: false,
+        ann_enabled: true,
+        ann_min_index: 1_500,
+        ann_top_k: 100,
     }
 }
 

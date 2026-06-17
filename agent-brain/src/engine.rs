@@ -384,6 +384,11 @@ impl Engine {
             use_bm25_fast_path,
             Some(phase),
             Some(&match_ctx),
+            crate::ann::AnnSettings {
+                enabled: self.config.ann_enabled,
+                min_index: self.config.ann_min_index,
+                top_k: self.config.ann_top_k,
+            },
         )?;
         let score_us = score_started.elapsed().as_micros() as u64;
 

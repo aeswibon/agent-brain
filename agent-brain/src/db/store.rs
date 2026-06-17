@@ -8,6 +8,7 @@ use anyhow::{Context, Result};
 use rusqlite::{params, Connection, OptionalExtension};
 use uuid::Uuid;
 
+use crate::ann::AnnIndex;
 use crate::db::migrations;
 use crate::embed::{batch_dot_products, normalize_embedding};
 use crate::intelligence::{parse_apply_when, MatchContext, matches_apply_when};
@@ -28,6 +29,7 @@ pub(crate) struct SearchIndexCache {
     scoped_indices: HashMap<String, Vec<usize>>,
     memories: Vec<CachedRow>,
     memories_by_id: HashMap<String, usize>,
+    ann: Option<AnnIndex>,
 }
 
 pub(crate) struct Bm25Prefilter {
@@ -53,20 +55,41 @@ impl Bm25Prefilter {
 }
 
 #[derive(Clone)]
-struct CachedRow {
-    id: String,
-    item_type: String,
-    topic: String,
-    text: String,
-    source_path: String,
-    scope: String,
-    scope_key: Option<String>,
-    embedding: Option<Vec<f32>>,
+pub(crate) struct CachedRow {
+    pub(crate) id: String,
+    pub(crate) item_type: String,
+    pub(crate) topic: String,
+    pub(crate) text: String,
+    pub(crate) source_path: String,
+    pub(crate) scope: String,
+    pub(crate) scope_key: Option<String>,
+    pub(crate) embedding: Option<Vec<f32>>,
     updated_at: i64,
     polarity: Option<String>,
     source: Option<String>,
     confidence: f64,
     apply_when: Option<String>,
+}
+
+#[cfg(test)]
+impl CachedRow {
+    pub(crate) fn test_with_embedding(id: &str, emb: Vec<f32>) -> Self {
+        Self {
+            id: id.into(),
+            item_type: "skill".into(),
+            topic: id.into(),
+            text: String::new(),
+            source_path: String::new(),
+            scope: "global".into(),
+            scope_key: None,
+            embedding: Some(emb),
+            updated_at: 0,
+            polarity: None,
+            source: None,
+            confidence: 0.9,
+            apply_when: None,
+        }
+    }
 }
 
 pub struct BrainStore {
@@ -135,6 +158,7 @@ impl BrainStore {
             .enumerate()
             .map(|(i, row)| (row.id.clone(), i))
             .collect();
+        let ann = AnnIndex::from_rows(&indexed);
         let cache = Arc::new(SearchIndexCache {
             version,
             indexed,
@@ -143,6 +167,7 @@ impl BrainStore {
             scoped_indices,
             memories,
             memories_by_id,
+            ann,
         });
         if let Ok(mut guard) = self.search_cache.lock() {
             *guard = Some(Arc::clone(&cache));
@@ -1664,6 +1689,7 @@ impl BrainStore {
         bm25_only: bool,
         phase: Option<&str>,
         match_ctx: Option<&MatchContext<'_>>,
+        ann_settings: crate::ann::AnnSettings,
     ) -> Result<(Vec<ScoredItem>, usize, usize)> {
         let index_total = snapshot.indexed.len() + snapshot.memories.len();
 
@@ -1677,6 +1703,20 @@ impl BrainStore {
         for id in &bm25.memory_ids {
             if let Some(&idx) = snapshot.memories_by_id.get(id) {
                 candidates.push(&snapshot.memories[idx]);
+            }
+        }
+
+        if ann_settings.enabled && !bm25_only && !query_embedding.is_empty() {
+            if let Some(ann) = snapshot.ann.as_ref() {
+                if ann.is_active(ann_settings.min_index) {
+                    for (id, _) in ann.top_k(query_embedding, ann_settings.top_k) {
+                        if candidate_ids.insert(id.clone()) {
+                            if let Some(&idx) = snapshot.indexed_by_id.get(&id) {
+                                candidates.push(&snapshot.indexed[idx]);
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -1897,6 +1937,7 @@ impl BrainStore {
             false,
             phase,
             match_ctx,
+            crate::ann::AnnSettings::default(),
         )
     }
 }

@@ -29,6 +29,9 @@ pub struct Config {
     pub auto_update_startup_delay_secs: u64,
     /// Extra delay before background session ingest (after bootstrap).
     pub session_ingest_delay_secs: u64,
+    pub ann_enabled: bool,
+    pub ann_min_index: usize,
+    pub ann_top_k: usize,
     /// Write human-readable route summary to ~/.agent_brain/logs/last-route.md
     pub route_briefing_enabled: bool,
     /// One-line route summary on stderr (visible in Cursor MCP output)
@@ -86,6 +89,9 @@ impl Config {
             session_ingest_delay_secs: env_u64("AGENT_BRAIN_SESSION_INGEST_DELAY_SEC", 180),
             route_briefing_enabled: env_bool("AGENT_BRAIN_ROUTE_BRIEFING", true),
             route_briefing_stderr: env_bool("AGENT_BRAIN_ROUTE_BRIEFING_STDERR", true),
+            ann_enabled: env_bool("AGENT_BRAIN_ANN", true),
+            ann_min_index: env_usize("AGENT_BRAIN_ANN_MIN_INDEX", crate::ann::DEFAULT_ANN_MIN_INDEX),
+            ann_top_k: env_usize("AGENT_BRAIN_ANN_TOP_K", crate::ann::DEFAULT_ANN_TOP_K),
             home,
             data_dir,
         })
@@ -118,6 +124,9 @@ impl Config {
             session_ingest_delay_secs: 0,
             route_briefing_enabled: false,
             route_briefing_stderr: false,
+            ann_enabled: true,
+            ann_min_index: crate::ann::DEFAULT_ANN_MIN_INDEX,
+            ann_top_k: crate::ann::DEFAULT_ANN_TOP_K,
         }
     }
 
@@ -213,4 +222,11 @@ fn env_bool(key: &str, default: bool) -> bool {
         Ok(v) => matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"),
         Err(_) => default,
     }
+}
+
+fn env_usize(key: &str, default: usize) -> usize {
+    std::env::var(key)
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(default)
 }

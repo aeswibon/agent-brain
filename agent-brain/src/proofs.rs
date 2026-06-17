@@ -7,6 +7,7 @@ use chrono::Utc;
 
 use crate::bench::{assert_bench_gate, run_ci_bench, LatencyBenchReport};
 use crate::eval::{assert_ci_gate, run_ci_eval_isolated, EvalReport};
+use crate::scale_bench::{assert_scale_bench_gate, run_ci_scale_bench, ScaleBenchReport};
 use crate::supervisor_bench::{
     assert_supervisor_bench_gate, run_supervisor_bench, SupervisorBenchReport,
 };
@@ -22,6 +23,7 @@ pub struct ProofReport {
     pub latency: LatencyBenchReport,
     pub supervisor: SupervisorBenchReport,
     pub token_tools: TokenToolsBenchReport,
+    pub scale: ScaleBenchReport,
     pub passed: bool,
 }
 
@@ -43,6 +45,9 @@ pub fn run_ci_proofs() -> Result<ProofReport> {
         );
     }
 
+    let scale = run_ci_scale_bench()?;
+    assert_scale_bench_gate(&scale)?;
+
     Ok(ProofReport {
         generated_at: Utc::now().to_rfc3339(),
         environment: "isolated-fixture",
@@ -53,6 +58,7 @@ pub fn run_ci_proofs() -> Result<ProofReport> {
         latency,
         supervisor,
         token_tools,
+        scale,
     })
 }
 
@@ -85,6 +91,7 @@ pub fn assert_ci_proofs(report: &ProofReport) -> Result<()> {
     if !report.token_tools.passed {
         bail!("token tools proof gate failed");
     }
+    assert_scale_bench_gate(&report.scale)?;
     if !report.passed {
         bail!("proof report marked failed");
     }
