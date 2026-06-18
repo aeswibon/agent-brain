@@ -939,10 +939,19 @@ impl BrainStore {
         scope: &str,
         scope_key: Option<&str>,
     ) -> Result<Option<ActiveFactSnapshot>> {
+        let now = chrono::Utc::now().timestamp_millis();
         self.with_conn(|conn| {
             conn.query_row(
-                "SELECT id, fact, updated_at FROM facts WHERE topic = ?1 AND scope = ?2 AND IFNULL(scope_key,'') = IFNULL(?3,'') AND superseded_by IS NULL",
-                params![topic, scope, scope_key],
+                &format!(
+                    "SELECT id, fact, updated_at FROM facts
+                     WHERE topic = ?1 AND scope = ?2 AND IFNULL(scope_key,'') = IFNULL(?3,'')
+                       AND superseded_by IS NULL
+                       AND {}
+                     ORDER BY updated_at DESC
+                     LIMIT 1",
+                    crate::temporal::active_fact_sql("?4")
+                ),
+                params![topic, scope, scope_key, now],
                 |row| {
                     Ok(ActiveFactSnapshot {
                         id: row.get(0)?,
@@ -1170,7 +1179,7 @@ impl BrainStore {
     pub fn get_conflict(&self, id: &str) -> Result<Option<ConflictSnapshot>> {
         self.with_conn(|conn| {
             conn.query_row(
-                "SELECT id, topic, scope, scope_key, loser_id, loser_fact, winner_id, restored FROM conflict_log WHERE id = ?1",
+                "SELECT id, topic, scope, scope_key, loser_id, loser_fact, winner_id, winner_fact, restored FROM conflict_log WHERE id = ?1",
                 params![id],
                 |row| {
                     Ok(ConflictSnapshot {
@@ -1181,7 +1190,8 @@ impl BrainStore {
                         loser_id: row.get(4)?,
                         loser_fact: row.get(5)?,
                         winner_id: row.get(6)?,
-                        restored: row.get::<_, i64>(7)? != 0,
+                        winner_fact: row.get(7)?,
+                        restored: row.get::<_, i64>(8)? != 0,
                     })
                 },
             )
@@ -1194,6 +1204,22 @@ impl BrainStore {
         self.with_conn(|conn| {
             conn.execute("DELETE FROM facts WHERE id = ?1", rusqlite::params![id])?;
             Ok(())
+        })
+    }
+
+    pub fn delete_fact_by_topic_text(
+        &self,
+        topic: &str,
+        scope: &str,
+        scope_key: Option<&str>,
+        fact: &str,
+    ) -> Result<usize> {
+        self.with_conn(|conn| {
+            let deleted = conn.execute(
+                "DELETE FROM facts WHERE topic = ?1 AND scope = ?2 AND IFNULL(scope_key,'') = IFNULL(?3,'') AND fact = ?4",
+                params![topic, scope, scope_key, fact],
+            )?;
+            Ok(deleted)
         })
     }
 
@@ -2162,6 +2188,7 @@ pub struct ConflictSnapshot {
     pub loser_id: String,
     pub loser_fact: String,
     pub winner_id: String,
+    pub winner_fact: String,
     pub restored: bool,
 }
 

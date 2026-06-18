@@ -18,7 +18,14 @@ pub fn restore_conflict(
         bail!("conflict already restored: {conflict_id}");
     }
 
-    // Free unique(content_hash, scope) slot held by the superseded loser row.
+    // Remove the imported winner and free the loser slot before re-promoting.
+    let _ = store.delete_fact_by_id(&row.winner_id);
+    store.delete_fact_by_topic_text(
+        &row.topic,
+        &row.scope,
+        row.scope_key.as_deref(),
+        &row.winner_fact,
+    )?;
     store.delete_fact_by_id(&row.loser_id)?;
 
     let embedding = embedder.embed_one(&format!("{} {}", row.topic, row.loser_fact))?;

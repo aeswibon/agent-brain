@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.1] - 2026-06-18
+
+### Fixed
+
+- **Sync restore** — conflict logs store actual winner fact IDs; restore removes imported winner before re-promoting loser (ADD-only memory compatible).
+- **`get_active_fact_by_topic`** — returns newest active fact by `updated_at` with temporal validity filter.
+
+### Changed
+
+- **README** — aligned with context-engine vision: memory engine section, filterable HNSW, ADD-only memory, full host install list.
+
 ## [0.21.0] - 2026-06-18
 
 ### Added

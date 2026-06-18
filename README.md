@@ -1,10 +1,10 @@
 # agent-brain
 
-**Route ~500 tokens of the right skills from thousands — hooks make it mandatory.**
+**Local context & memory engine for IDE agents — route ~500 tokens of the right skills from thousands, with hooks that make it mandatory.**
 
-Local MCP router for Cursor, Claude Code, and other agent IDEs. Cuts input context **~90–99%** vs loading your full skill library (see `agent-brain briefing`). **Hard-enforced** `route_task` via hooks — not “please follow the rule.”
+agent-brain is evolving from a fast local **router** into a **token-efficient context engine**: skills/rules routing, temporal memory, multi-signal retrieval, and hook-enforced `route_task` — all in one binary, zero external vector DB.
 
-Rust is the brain; Cursor/Claude are the hands.
+Rust is the brain; Cursor/Codex/Claude are the hands.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/aeswibon/agent-brain/master/scripts/install.sh | bash -s -- --global --with-starter
@@ -25,13 +25,15 @@ Three problems every power-user hits with Cursor skills and rules:
 2. **Soft enforcement** — telling the model “use skills first” in a rule is optional. The agent can still grep, edit, or guess.
 3. **No durable routing memory** — decisions from last week are not automatically surfaced as constraints on the next similar task.
 
-**agent-brain fixes this with a local turn router:**
+**agent-brain fixes this with a local context engine:**
 
 | Problem | agent-brain answer |
 |---------|-------------------|
 | Too much to load | **`route_task`** returns ~500 tokens of the *right* skills/rules/memory for *this* message |
-| Model skips skills | **Cursor hooks** block other tools until `route_task` succeeds each turn |
-| Forgotten conventions | **`store_memory`** + **`must_apply`** surface durable facts on similar future tasks |
+| Model skips skills | **IDE hooks** block agent-brain MCP tools until `route_task` succeeds each turn |
+| Forgotten conventions | **ADD-only `store_memory`** + **`must_apply`** + temporal validity windows |
+| Memory loses history | **Temporal KG** in SQLite (`memory_kg_edges`, `valid_from` / `invalid_at`) — facts evolve, not erase |
+| Slow vector search under scope filters | **Filterable HNSW** (embedded, Qdrant-inspired) — scope-aware ANN with bridge edges |
 | Skill library sprawl | **`agent-brain add owner/repo`** installs and indexes packages (ECC, team rules) |
 | Two laptops / backup | **Git + encrypted cloud sync** for `brain.db` bundles |
 | MCP disconnects block you | **Scoped gate (v0.7.1+)** — Shell/Read keep working; offline cooldown instead of hard-lock |
@@ -72,7 +74,7 @@ Example: after the agent burns tokens reading `dist/`, store *“Never read dist
 | **Cursor skills / rules (static)** | Authoring & discovery | Per-turn budget, hard enforcement, ranked retrieval | Routes + hooks + token cap every message |
 | **Memory SaaS** (Mem0, Zep, etc.) | Long-term chat / user memory | Local skill libraries, IDE hooks, package installs | Local SQLite memory *plus* skill/agent/rule routing |
 | **Agent frameworks** (LangGraph, CrewAI) | Multi-step agent runtime in *your app* | Drop-in MCP gate for the IDE | Zero app code — MCP + hooks in Cursor |
-| **Vector / RAG** (Chroma, Qdrant, etc.) | Document search at scale | Phase-aware skills, `must_apply`, negative memory, package scope | BM25 + embeddings tuned for *skills*, not generic docs |
+| **Vector / RAG** (Chroma, Qdrant, etc.) | Document search at scale | Phase-aware skills, `must_apply`, negative memory, IDE hooks | **Filterable HNSW** + BM25 + embeddings + entity fusion — tuned for *skills*, not generic docs |
 | **“Just add a rule”** | Free | Cannot stop the model from ignoring it | Hooks deny tools until `route_task` runs |
 
 ### Inspirations & Credits
@@ -87,8 +89,24 @@ agent-brain draws architectural inspiration from these projects (adapted inside 
 
 **V1 graph decision:** Native SQLite node/edge tables + recursive CTEs in `brain.db` — no embedded graph DB — preserving zero-setup sync and single-binary releases.
 
+---
 
-### Scenario: which tool wins?
+## Memory engine (v0.21+)
+
+Token-efficient memory adapted from Zep & Mem0, implemented inside `brain.db` (no SaaS API per turn):
+
+| Layer | What it does |
+|-------|----------------|
+| **ADD-only facts** | `store_memory` appends; same-topic updates link via `evolved_from` KG edges instead of destructive overwrite |
+| **Temporal validity** | `valid_from` / `invalid_at` windows; `temporal::prune_expired` archives stale facts |
+| **Multi-signal retrieval** | Semantic (embeddings) + BM25 + lexical + **entity overlap** fused per candidate |
+| **Filterable HNSW** | In-memory scope-aware ANN (≥256 nodes) with per-filter bridge edges — p95 ≤ 50ms on 2k index |
+| **Session digests** | Cross-IDE transcripts (Cursor, Codex, Gemini, OpenCode) surface only through `route_task` |
+| **Stateful hooks** | `must_apply` + phase persist across prompts until the next route |
+
+**Roadmap (next):** observation engine (auto-synthesize `must_apply` from recurring patterns), MCP `invalid_at` on `store_memory`, BEAM-scale eval harness.
+
+---
 
 - **“I have 200 ECC skills and the agent keeps using the wrong ones”** → agent-brain ranks by message + phase and returns paths to load.
 - **“The agent skips `route_task` and greps the repo”** → hooks deny Shell/Read until routing succeeds (scoped to agent-brain MCP tools by default).
@@ -137,6 +155,7 @@ Reproducible proof artifacts live in [`docs/benchmarks/`](docs/benchmarks/). Reg
 | Graphify `code_context` route p95 | 1k nodes + 500 skills | — | **≤ 65 ms** | gated (CI) | `bench --graphify` |
 | MCP tool latency | 500 skills | route + context + token tools | see `bench --mcp` | informational | `bench --mcp` |
 | Turn-cache p95 (fixture) | 500 | — | **≤ 30 ms** | gated | `proofs --ci` |
+| Filterable HNSW p95 | 2k scoped | — | **≤ 50 ms** | gated (unit test) | `ann` tests |
 | Execution supervisor | 500 + `@supervisor` | 3 scenarios | skill **100%** · must_apply **100%** · savings **~99%** · p95 **≤ 100 ms** | gated | `proofs --ci` |
 | Token MCP tools | synthetic 2k-line file | 4 tools | **≥ 80%** savings vs full read | gated | `proofs --ci` |
 | Supervisor telemetry | hook + tool_log | 24h window | tool savings + Read steers in briefing | informational | `agent-brain stats` |
@@ -306,7 +325,7 @@ The **agent** calls this at task end (you do not run it manually in normal use).
 }
 ```
 
-Rules: max 50 words, no secrets. Conflicting facts are superseded with a conflict log (`agent-brain sync status`).
+Rules: max 50 words, no secrets. **ADD-only:** new facts append; same-topic updates create KG evolution links (history preserved). Sync conflicts use `agent-brain sync status` and `sync restore <conflict-id>`.
 
 ### v0.10 operator loop (promote, gc, digest, eval)
 
@@ -482,13 +501,13 @@ agent-brain doctor
 
 ```text
 user message
-  → hook marks turn “needs route_task”
-  → agent calls route_task (blocked until this succeeds)
-  → BM25 prefilter → embed → score → token budget assembly
+  → hook marks turn “needs route_task” (must_apply + phase persist)
+  → agent calls route_task (agent-brain MCP gated until this succeeds)
+  → BM25 prefilter → filterable HNSW / embed → multi-signal fusion → token budget
   → agent loads recommended skills/agents from returned paths
   → agent applies rules + must_apply memory
   → agent does work (Shell, Read, Edit, …)
-  → agent calls store_memory for durable decisions
+  → agent calls store_memory for durable decisions (ADD-only append)
 ```
 
 | Action | Who |
@@ -511,7 +530,8 @@ user message
 | Mechanism | Effect |
 |-----------|--------|
 | Turn cache (60s LRU) | Repeat queries skip embed + score |
-| Always embed on route | Semantic signal (BM25-only fast path removed) |
+| BM25 + filterable HNSW | Lexical prefilter then scope-aware vector candidates on large indexes |
+| Multi-signal fusion | Semantic + BM25 + lexical + entity overlap per candidate |
 | Bootstrap prewarm | Warm index + embedder before first route |
 | Query embedding cache | Persisted in SQLite across restarts |
 
@@ -523,14 +543,17 @@ Tune via MCP `env` in `mcp.json` — see [docs/USAGE.md](docs/USAGE.md#environme
 
 ## Other MCP hosts
 
-Same binary works with **Cursor, Claude Code, OpenCode, Claude Desktop, and VS Code**. Use host installers:
+Same binary works with **Cursor, Claude Code, Codex, OpenCode, Claude Desktop, and VS Code**. Use host installers:
 
 ```bash
 agent-brain install --claude-desktop
 agent-brain install --vscode [--global]
 agent-brain install --claude-code [--global]
 agent-brain install --opencode [--global]
-agent-brain install --all
+agent-brain install --codex [--global]
+agent-brain install --gemini [--global]
+agent-brain install --antigravity [--global]
+agent-brain install --all --global
 ```
 
 Skills under `~/.claude/` and `~/.codex/` are already indexed.

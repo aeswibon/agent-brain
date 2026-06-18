@@ -204,19 +204,7 @@ fn import_one_fact(
                 report.skipped += 1;
                 return Ok(());
             }
-            MergePolicy::KeepRemote | MergePolicy::NewerWins => {
-                store.log_import_conflict(
-                    sync_source.as_str(),
-                    &remote.topic,
-                    &remote.scope,
-                    remote.scope_key.as_deref(),
-                    &local.id,
-                    &local.fact,
-                    &remote.id,
-                    &remote.fact,
-                )?;
-                report.conflicts_resolved += 1;
-            }
+            MergePolicy::KeepRemote | MergePolicy::NewerWins => {}
         }
     }
 
@@ -239,6 +227,25 @@ fn import_one_fact(
         &remote.polarity,
         apply_when_json.as_deref(),
     )?;
+
+    if let Some(local) = &local {
+        match policy {
+            MergePolicy::KeepRemote | MergePolicy::NewerWins => {
+                store.log_import_conflict(
+                    sync_source.as_str(),
+                    &remote.topic,
+                    &remote.scope,
+                    remote.scope_key.as_deref(),
+                    &local.id,
+                    &local.fact,
+                    &res.id,
+                    &remote.fact,
+                )?;
+                report.conflicts_resolved += 1;
+            }
+            _ => {}
+        }
+    }
 
     if res.stored {
         report.imported += 1;
