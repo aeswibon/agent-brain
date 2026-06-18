@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.1] - 2026-06-18
+
+### Fixed
+
+- **Codex PreToolUse hooks** — allow paths no longer emit unsupported `permissionDecision: allow` (empty `{}` or `additionalContext` only); deny uses `permissionDecisionReason`.
+- **`grep_search` oversized lines** — skip JSONL lines >256 KiB (e.g. `~/.codex/sessions`) instead of failing with `read grep line`; reports `lines_skipped_oversized`.
+
 ## [0.22.0] - 2026-06-18
 
 ### Added

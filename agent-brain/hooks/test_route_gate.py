@@ -302,6 +302,33 @@ class MultiHostHookOutputTests(unittest.TestCase):
             {"permission": "deny", "agent_message": "call route_task first"},
         )
         self.assertEqual(out["hookSpecificOutput"]["permissionDecision"], "deny")
+        self.assertEqual(
+            out["hookSpecificOutput"]["permissionDecisionReason"], "call route_task first"
+        )
+
+    def test_codex_pre_tool_use_allow_empty(self) -> None:
+        out = route_gate.adapt_hook_output(
+            "PreToolUse",
+            {"permission": "allow"},
+            {"turn_id": "turn-1", "tool_name": "mcp__agent-brain__read_file_head"},
+        )
+        self.assertEqual(out, {})
+
+    def test_codex_pre_tool_use_allow_steers_with_context(self) -> None:
+        out = route_gate.adapt_hook_output(
+            "PreToolUse",
+            {"permission": "allow", "agent_message": "prefer bounded reads"},
+            {"turn_id": "turn-1"},
+        )
+        self.assertEqual(
+            out["hookSpecificOutput"]["additionalContext"], "prefer bounded reads"
+        )
+        self.assertNotIn("permissionDecision", out["hookSpecificOutput"])
+
+    def test_cursor_pre_tool_use_allow_passthrough(self) -> None:
+        payload = {"permission": "allow", "agent_message": "ok"}
+        out = route_gate.adapt_hook_output("preToolUse", payload)
+        self.assertEqual(out, payload)
 
 
 class StatefulWorkflowHookTests(unittest.TestCase):
@@ -361,8 +388,12 @@ class StatefulWorkflowHookTests(unittest.TestCase):
         out = route_gate.adapt_hook_output(
             "PreToolUse",
             {"permission": "deny", "agent_message": "route_task required"},
+            {"turn_id": "turn-1"},
         )
         self.assertEqual(out["hookSpecificOutput"]["permissionDecision"], "deny")
+        self.assertEqual(
+            out["hookSpecificOutput"]["permissionDecisionReason"], "route_task required"
+        )
 
 
 if __name__ == "__main__":

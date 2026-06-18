@@ -584,8 +584,57 @@ def handle_before_mcp_execution(event: dict) -> dict:
     return gate_tool_use(event)
 
 
-def adapt_hook_output(event_name: str, out: dict) -> dict:
-    """Map Cursor-style permission payloads to Claude Code / Gemini hook schemas."""
+def is_codex_event(event: dict | None) -> bool:
+    """Codex turn hooks include turn_id; bare permissionDecision allow is unsupported."""
+    if not event:
+        return False
+    if event.get("turn_id"):
+        return True
+    return bool(os.environ.get("CODEX_HOME"))
+
+
+def adapt_pre_tool_use_output(out: dict, event: dict | None) -> dict:
+    """Map route gate payloads to Claude Code / Codex PreToolUse schemas."""
+    permission = out.get("permission")
+    agent_message = out.get("agent_message") or out.get("user_message") or ""
+    if permission == "deny":
+        return {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": agent_message,
+            }
+        }
+    if permission == "allow":
+        if is_codex_event(event):
+            # Codex marks bare permissionDecision allow as invalid unless updatedInput is set.
+            if agent_message:
+                return {
+                    "hookSpecificOutput": {
+                        "hookEventName": "PreToolUse",
+                        "additionalContext": agent_message,
+                    }
+                }
+            return {}
+        if agent_message:
+            return {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "allow",
+                },
+                "systemMessage": agent_message,
+            }
+        return {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "allow",
+            }
+        }
+    return out
+
+
+def adapt_hook_output(event_name: str, out: dict, event: dict | None = None) -> dict:
+    """Map Cursor-style permission payloads to Claude Code / Gemini / Codex hook schemas."""
     if not out:
         return out
     permission = out.get("permission")
@@ -596,18 +645,11 @@ def adapt_hook_output(event_name: str, out: dict) -> dict:
         if permission == "allow" and agent_message:
             return {"decision": "allow", "systemMessage": agent_message}
         return {"decision": "allow"}
-    if event_name in {"PreToolUse", "beforeMCPExecution", "beforeShellExecution"}:
-        if permission == "deny":
-            return {
-                "hookSpecificOutput": {"permissionDecision": "deny"},
-                "systemMessage": agent_message,
-            }
-        if permission == "allow" and agent_message:
-            return {
-                "hookSpecificOutput": {"permissionDecision": "allow"},
-                "systemMessage": agent_message,
-            }
-        return {"hookSpecificOutput": {"permissionDecision": "allow"}}
+    # Cursor-native events use permission/user_message/agent_message directly.
+    if event_name in {"preToolUse", "beforeMCPExecution", "beforeShellExecution"}:
+        return out
+    if event_name == "PreToolUse":
+        return adapt_pre_tool_use_output(out, event)
     if event_name in {"UserPromptSubmit", "BeforeAgent"}:
         if out.get("continue") is False:
             return {"decision": "deny", "reason": agent_message}
@@ -665,7 +707,7 @@ def main() -> int:
             "beforeMCPExecution",
             "beforeShellExecution",
         }:
-            print(json.dumps(adapt_hook_output(event_name, {"permission": "allow"})))
+            print(json.dumps(adapt_hook_output(event_name, {"permission": "allow"}, event)))
         else:
             print("{}")
         return 0
@@ -693,7 +735,7 @@ def main() -> int:
     else:
         out = {}
 
-    out = adapt_hook_output(raw_name or name, out)
+    out = adapt_hook_output(raw_name or name, out, event)
     print(json.dumps(out))
     return 0
 

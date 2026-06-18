@@ -18,6 +18,9 @@ pub const DEFAULT_MAX_LINES: usize = 200;
 pub const DEFAULT_MAX_BYTES: usize = 32_768;
 pub const DEFAULT_GREP_MAX_MATCHES: usize = 50;
 pub const MAX_GREP_FILE_BYTES: u64 = 10 * 1024 * 1024;
+/// Lines longer than this are skipped (e.g. Codex session JSONL blobs) instead of failing grep.
+pub const MAX_GREP_LINE_BYTES: usize = 256 * 1024;
+pub const MAX_GREP_MATCH_CHARS: usize = 512;
 pub const TOKEN_TOOLS_SAVINGS_MIN_PCT: f64 = 80.0;
 
 pub const BLOCKED_SEGMENTS: &[&str] = &[
@@ -61,6 +64,12 @@ pub struct GrepResponse {
     pub tokens_budget: usize,
     pub tokens_saved_vs_full_read: Option<usize>,
     pub savings_pct_vs_full_read: Option<f64>,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub lines_skipped_oversized: usize,
+}
+
+fn is_zero(n: &usize) -> bool {
+    *n == 0
 }
 
 pub fn resolve_tool_path(path: &str, cwd: Option<&Path>) -> Result<PathBuf> {
@@ -140,18 +149,24 @@ pub fn read_file_head(
     let mut out = String::new();
     let mut lines_returned = 0usize;
     let mut bytes_read = 0usize;
-    let reader = BufReader::new(File::open(path).context("open file")?);
-    for line in reader.lines() {
-        let line = line.context("read line")?;
-        let chunk = format!("{line}\n");
-        if bytes_read + chunk.len() > max_bytes {
-            break;
-        }
-        out.push_str(&chunk);
-        bytes_read += chunk.len();
-        lines_returned += 1;
+    let mut reader = BufReader::new(File::open(path).context("open file")?);
+    loop {
         if lines_returned >= max_lines {
             break;
+        }
+        match read_bounded_line(&mut reader, max_bytes.min(MAX_GREP_LINE_BYTES)) {
+            Ok(None) => break,
+            Ok(Some(line)) => {
+                let chunk = format!("{line}\n");
+                if bytes_read + chunk.len() > max_bytes {
+                    break;
+                }
+                out.push_str(&chunk);
+                bytes_read += chunk.len();
+                lines_returned += 1;
+            }
+            Err(BoundedLineError::Oversized) => continue,
+            Err(BoundedLineError::Io(e)) => return Err(e).context("read line"),
         }
     }
     let full_estimate = estimate_tokens(&std::fs::read_to_string(path).unwrap_or_default());
@@ -222,10 +237,20 @@ pub fn grep_search(
     let limit = max_matches.clamp(1, 200);
     let mut matches = Vec::new();
     let mut full_bytes = 0u64;
+    let mut lines_skipped_oversized = 0usize;
 
     if path.is_file() {
-        full_bytes = std::fs::metadata(path)?.len();
-        grep_file(path, &re, limit, &mut matches)?;
+        let meta = std::fs::metadata(path)?;
+        full_bytes = meta.len();
+        if full_bytes > MAX_GREP_FILE_BYTES {
+            bail!(
+                "file too large for grep ({} bytes > {}); narrow path or use read_file_tail on a smaller slice",
+                full_bytes,
+                MAX_GREP_FILE_BYTES
+            );
+        }
+        let skipped = grep_file(path, &re, limit, &mut matches)?;
+        lines_skipped_oversized = skipped;
     } else if path.is_dir() {
         for entry in WalkDir::new(path)
             .follow_links(false)
@@ -245,7 +270,7 @@ pub fn grep_search(
                 }
                 full_bytes = full_bytes.saturating_add(meta.len());
             }
-            grep_file(p, &re, limit.saturating_sub(matches.len()), &mut matches)?;
+            lines_skipped_oversized += grep_file(p, &re, limit.saturating_sub(matches.len()), &mut matches)?;
             if matches.len() >= limit {
                 break;
             }
@@ -276,28 +301,120 @@ pub fn grep_search(
         tokens_budget: max_tokens,
         tokens_saved_vs_full_read: saved,
         savings_pct_vs_full_read: savings_pct,
+        lines_skipped_oversized,
     })
 }
 
-fn grep_file(path: &Path, re: &Regex, limit: usize, out: &mut Vec<GrepMatch>) -> Result<()> {
+fn grep_file(path: &Path, re: &Regex, limit: usize, out: &mut Vec<GrepMatch>) -> Result<usize> {
     if limit == 0 {
-        return Ok(());
+        return Ok(0);
     }
-    let reader = BufReader::new(File::open(path).context("open grep file")?);
-    for (idx, line) in reader.lines().enumerate() {
-        let line = line.context("read grep line")?;
-        if re.is_match(&line) {
-            out.push(GrepMatch {
-                path: path.display().to_string(),
-                line_number: idx + 1,
-                line,
-            });
-            if out.len() >= limit {
-                break;
+    let mut reader = BufReader::new(File::open(path).context("open grep file")?);
+    let mut line_no = 0usize;
+    let mut skipped_oversized = 0usize;
+    loop {
+        line_no += 1;
+        match read_bounded_line(&mut reader, MAX_GREP_LINE_BYTES) {
+            Ok(None) => break,
+            Ok(Some(line)) => {
+                if re.is_match(&line) {
+                    out.push(GrepMatch {
+                        path: path.display().to_string(),
+                        line_number: line_no,
+                        line: truncate_for_match(&line, MAX_GREP_MATCH_CHARS),
+                    });
+                    if out.len() >= limit {
+                        break;
+                    }
+                }
             }
+            Err(BoundedLineError::Oversized) => {
+                skipped_oversized += 1;
+            }
+            Err(BoundedLineError::Io(e)) => return Err(e).context("read grep line"),
         }
     }
-    Ok(())
+    Ok(skipped_oversized)
+}
+
+enum BoundedLineError {
+    Oversized,
+    Io(std::io::Error),
+}
+
+/// Read one line up to `max_bytes`; skip oversized lines without failing the whole search.
+fn read_bounded_line(
+    reader: &mut impl BufRead,
+    max_bytes: usize,
+) -> Result<Option<String>, BoundedLineError> {
+    let mut buf = Vec::new();
+    loop {
+        let chunk = {
+            let available = match reader.fill_buf() {
+                Ok(b) if b.is_empty() => break,
+                Ok(b) => b,
+                Err(e) => return Err(BoundedLineError::Io(e)),
+            };
+            available.to_vec()
+        };
+
+        if let Some(pos) = chunk.iter().position(|&b| b == b'\n') {
+            let oversize = buf.len() + pos > max_bytes;
+            let consume = pos + 1;
+            if !oversize {
+                buf.extend_from_slice(&chunk[..pos]);
+            }
+            reader.consume(consume);
+            return if oversize {
+                Err(BoundedLineError::Oversized)
+            } else {
+                Ok(Some(String::from_utf8_lossy(&buf).into_owned()))
+            };
+        }
+
+        let chunk_len = chunk.len();
+        if buf.len() + chunk_len > max_bytes {
+            reader.consume(chunk_len);
+            skip_until_newline(reader)?;
+            return Err(BoundedLineError::Oversized);
+        }
+        buf.extend_from_slice(&chunk);
+        reader.consume(chunk_len);
+    }
+
+    if buf.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(String::from_utf8_lossy(&buf).into_owned()))
+    }
+}
+
+fn skip_until_newline(reader: &mut impl BufRead) -> Result<(), BoundedLineError> {
+    loop {
+        let (consume, done) = {
+            let available = match reader.fill_buf() {
+                Ok(b) if b.is_empty() => return Ok(()),
+                Ok(b) => b,
+                Err(e) => return Err(BoundedLineError::Io(e)),
+            };
+            match available.iter().position(|&b| b == b'\n') {
+                Some(pos) => (pos + 1, true),
+                None => (available.len(), false),
+            }
+        };
+        reader.consume(consume);
+        if done {
+            return Ok(());
+        }
+    }
+}
+
+fn truncate_for_match(line: &str, max_chars: usize) -> String {
+    if line.chars().count() <= max_chars {
+        return line.to_string();
+    }
+    let truncated: String = line.chars().take(max_chars).collect();
+    format!("{truncated}…")
 }
 
 fn read_tail_lines(path: &Path, max_lines: usize, max_bytes: usize) -> Result<Vec<String>> {
@@ -323,8 +440,16 @@ fn read_tail_lines(path: &Path, max_lines: usize, max_bytes: usize) -> Result<Ve
 }
 
 fn count_lines(path: &Path) -> Result<usize> {
-    let reader = BufReader::new(File::open(path).context("open file for line count")?);
-    Ok(reader.lines().count())
+    let mut reader = BufReader::new(File::open(path).context("open file for line count")?);
+    let mut count = 0usize;
+    loop {
+        match read_bounded_line(&mut reader, MAX_GREP_LINE_BYTES) {
+            Ok(None) => break,
+            Ok(Some(_)) | Err(BoundedLineError::Oversized) => count += 1,
+            Err(BoundedLineError::Io(e)) => return Err(e).context("count lines"),
+        }
+    }
+    Ok(count)
 }
 
 fn build_response(
@@ -577,6 +702,33 @@ mod tests {
         std::fs::write(&path, &body).unwrap();
         let resp = read_file_head(&path, 10, 4096, false, 500).unwrap();
         assert!(resp.savings_pct_vs_full_read.unwrap_or(0.0) >= TOKEN_TOOLS_SAVINGS_MIN_PCT);
+    }
+
+    #[test]
+    fn grep_skips_oversized_jsonl_line() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("session.jsonl");
+        let huge = "x".repeat(MAX_GREP_LINE_BYTES + 1024);
+        std::fs::write(
+            &path,
+            format!("{{\"small\":\"needle\"}}\n{huge}\n{{\"tail\":\"needle\"}}\n"),
+        )
+        .unwrap();
+        let resp = grep_search("needle", &path, 10, false, false, 500).unwrap();
+        assert_eq!(resp.matches.len(), 2);
+        assert_eq!(resp.lines_skipped_oversized, 1);
+    }
+
+    #[test]
+    fn grep_handles_binary_utf8_lossy() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("mixed.jsonl");
+        let mut bytes = b"normal needle line\n".to_vec();
+        bytes.extend_from_slice(&[0xff, 0xfe, b'n', 0x00]);
+        bytes.extend_from_slice(b"\nneedle after binary\n");
+        std::fs::write(&path, bytes).unwrap();
+        let resp = grep_search("needle", &path, 10, false, false, 500).unwrap();
+        assert!(resp.matches.len() >= 2);
     }
 
     #[test]
