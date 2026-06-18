@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-06-18
+
+### Added
+
+- **Temporal memory (Zep-inspired)** — `valid_from` / `invalid_at` on facts, `memory_kg_edges` table, `temporal.rs` pruning and KG traversal.
+- **ADD-only `store_memory`** — append facts with evolution links instead of destructive supersede on same topic.
+- **Filterable HNSW** — embedded scope-aware vector index with filter bridge edges (Qdrant-inspired); p95 ≤ 50ms benchmark on 2k nodes.
+- **Multi-signal retrieval** — entity overlap fused with semantic, BM25, and lexical scores (Mem0-inspired).
+- **Stateful hook persistence** — `must_apply` and phase survive new user prompts until next `route_task`.
+
+### Changed
+
+- **README** — Inspirations & Credits (Zep, Mem0, LangGraph, CrewAI, Qdrant/Chroma) and V1 SQLite graph decision.
+
 ## [0.20.0] - 2026-06-18
 
 ### Added

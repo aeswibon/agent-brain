@@ -304,5 +304,66 @@ class MultiHostHookOutputTests(unittest.TestCase):
         self.assertEqual(out["hookSpecificOutput"]["permissionDecision"], "deny")
 
 
+class StatefulWorkflowHookTests(unittest.TestCase):
+    """LangGraph-inspired phase/state persistence across hook events."""
+
+    def test_phase_persists_after_successful_route(self) -> None:
+        import route_gate
+
+        old_path = route_gate.STATE_PATH
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                route_gate.STATE_PATH = Path(tmp) / "route_state.json"
+                route_gate.STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+                payload = {
+                    "recommended_phase": "execution",
+                    "recommended_agents": [{"name": "reviewer"}],
+                    "tokens_used": 80,
+                }
+                route_gate.try_clear_route_gate(
+                    {
+                        "tool_name": "mcp_agent-brain_route_task",
+                        "tool_output": json.dumps(payload),
+                    }
+                )
+                state = load_state()
+                self.assertFalse(state.get("needs_route"))
+                self.assertEqual(state.get("route_phase"), "execution")
+        finally:
+            route_gate.STATE_PATH = old_path
+
+    def test_new_user_prompt_resets_route_and_preserves_must_apply(self) -> None:
+        import route_gate
+
+        old_path = route_gate.STATE_PATH
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                route_gate.STATE_PATH = Path(tmp) / "route_state.json"
+                route_gate.STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+                route_gate.STATE_PATH.write_text(
+                    json.dumps(
+                        {
+                            "needs_route": False,
+                            "route_phase": "planning",
+                            "must_apply": [{"topic": "vitest", "text": "use vitest"}],
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                handle_before_submit_prompt({})
+                state = load_state()
+                self.assertTrue(state.get("needs_route"))
+                self.assertEqual(len(state.get("must_apply", [])), 1)
+        finally:
+            route_gate.STATE_PATH = old_path
+
+    def test_codex_pre_tool_use_schema(self) -> None:
+        out = route_gate.adapt_hook_output(
+            "PreToolUse",
+            {"permission": "deny", "agent_message": "route_task required"},
+        )
+        self.assertEqual(out["hookSpecificOutput"]["permissionDecision"], "deny")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -182,6 +182,15 @@ pub fn run(conn: &Connection) -> rusqlite::Result<()> {
         conn.execute("UPDATE schema_version SET version = 10", [])?;
     }
 
+    let version: i64 = conn
+        .query_row("SELECT version FROM schema_version LIMIT 1", [], |r| r.get(0))
+        .unwrap_or(0);
+
+    if version < 11 {
+        migrate_v11(conn)?;
+        conn.execute("UPDATE schema_version SET version = 11", [])?;
+    }
+
     Ok(())
 }
 
@@ -391,6 +400,35 @@ fn migrate_v10(conn: &Connection) -> rusqlite::Result<()> {
             result_json TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_graphify_jobs_repo ON graphify_jobs(repo_root);
+        "#,
+    )?;
+    Ok(())
+}
+
+fn migrate_v11(conn: &Connection) -> rusqlite::Result<()> {
+    if !column_exists(conn, "facts", "valid_from")? {
+        conn.execute("ALTER TABLE facts ADD COLUMN valid_from INTEGER", [])?;
+    }
+    if !column_exists(conn, "facts", "invalid_at")? {
+        conn.execute("ALTER TABLE facts ADD COLUMN invalid_at INTEGER", [])?;
+    }
+    conn.execute(
+        "UPDATE facts SET valid_from = created_at WHERE valid_from IS NULL",
+        [],
+    )?;
+    conn.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS memory_kg_edges (
+            id TEXT PRIMARY KEY,
+            source_fact_id TEXT NOT NULL,
+            target_fact_id TEXT NOT NULL,
+            relation TEXT NOT NULL,
+            valid_from INTEGER NOT NULL,
+            invalid_at INTEGER,
+            created_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_memory_kg_source ON memory_kg_edges(source_fact_id);
+        CREATE INDEX IF NOT EXISTS idx_memory_kg_target ON memory_kg_edges(target_fact_id);
         "#,
     )?;
     Ok(())

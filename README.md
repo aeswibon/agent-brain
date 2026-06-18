@@ -75,6 +75,19 @@ Example: after the agent burns tokens reading `dist/`, store *“Never read dist
 | **Vector / RAG** (Chroma, Qdrant, etc.) | Document search at scale | Phase-aware skills, `must_apply`, negative memory, package scope | BM25 + embeddings tuned for *skills*, not generic docs |
 | **“Just add a rule”** | Free | Cannot stop the model from ignoring it | Hooks deny tools until `route_task` runs |
 
+### Inspirations & Credits
+
+agent-brain draws architectural inspiration from these projects (adapted inside our single-binary SQLite stack):
+
+- **[Zep](https://github.com/getzep/zep)**: Temporal knowledge graph and observation engine concepts (`valid_from` / `invalid_at`, memory KG edges).
+- **[Mem0](https://github.com/mem0ai/mem0)**: Hybrid middleware for agents — ADD-only memory, first-class agent facts, multi-signal retrieval fusion.
+- **[LangGraph](https://github.com/langchain-ai/langgraph)**: Stateful, phase-aware cyclic workflow modeling (`route_task` phases).
+- **[CrewAI](https://github.com/joaomdmoura/crewAI)**: Dynamic role and tool delegation (recommended agents + skills).
+- **[Qdrant](https://github.com/qdrant/qdrant)** & **[Chroma](https://github.com/chroma-core/chroma)**: Filterable HNSW and embedded-first vector search (custom in-memory index, zero external deps).
+
+**V1 graph decision:** Native SQLite node/edge tables + recursive CTEs in `brain.db` — no embedded graph DB — preserving zero-setup sync and single-binary releases.
+
+
 ### Scenario: which tool wins?
 
 - **“I have 200 ECC skills and the agent keeps using the wrong ones”** → agent-brain ranks by message + phase and returns paths to load.

@@ -74,14 +74,23 @@ pub(crate) struct CachedRow {
 #[cfg(test)]
 impl CachedRow {
     pub(crate) fn test_with_embedding(id: &str, emb: Vec<f32>) -> Self {
+        Self::test_with_embedding_scoped(id, emb, "global", None)
+    }
+
+    pub(crate) fn test_with_embedding_scoped(
+        id: &str,
+        emb: Vec<f32>,
+        scope: &str,
+        scope_key: Option<&str>,
+    ) -> Self {
         Self {
             id: id.into(),
             item_type: "skill".into(),
             topic: id.into(),
             text: String::new(),
             source_path: String::new(),
-            scope: "global".into(),
-            scope_key: None,
+            scope: scope.into(),
+            scope_key: scope_key.map(str::to_string),
             embedding: Some(emb),
             updated_at: 0,
             polarity: None,
@@ -214,10 +223,13 @@ impl BrainStore {
     fn load_memory_rows(&self) -> Result<Vec<CachedRow>> {
         self.with_conn(|conn| {
             let now = chrono::Utc::now().timestamp_millis();
-            let mut stmt = conn.prepare(
+            let mut stmt = conn.prepare(&format!(
                 r#"SELECT id, topic, fact, scope, scope_key, updated_at, polarity, source, confidence, apply_when
-                   FROM facts WHERE superseded_by IS NULL AND (expires_at IS NULL OR expires_at > ?1)"#,
-            )?;
+                   FROM facts WHERE superseded_by IS NULL
+                     AND (expires_at IS NULL OR expires_at > ?1)
+                     AND {}"#,
+                crate::temporal::active_fact_sql("?1")
+            ))?;
             let rows = stmt
                 .query_map(params![now], |row| {
                     Ok(CachedRow {
@@ -685,45 +697,28 @@ impl BrainStore {
             });
         }
 
-        let superseded: Option<(String, String)> = self.with_conn(|conn| {
+        let prior: Option<String> = self.with_conn(|conn| {
             Ok(conn
                 .query_row(
-                    "SELECT id, fact FROM facts WHERE topic = ?1 AND scope = ?2 AND IFNULL(scope_key,'') = IFNULL(?3,'') AND superseded_by IS NULL",
-                    params![topic, scope, scope_key],
-                    |r| Ok((r.get(0)?, r.get(1)?)),
+                    &format!(
+                        "SELECT id FROM facts WHERE topic = ?1 AND scope = ?2 AND IFNULL(scope_key,'') = IFNULL(?3,'') AND superseded_by IS NULL AND {}",
+                        crate::temporal::active_fact_sql("?4")
+                    ),
+                    params![topic, scope, scope_key, now],
+                    |r| r.get(0),
                 )
                 .optional()?)
         })?;
 
         self.with_conn(|conn| {
-            if let Some((old_id, old_fact)) = &superseded {
-                conn.execute(
-                    "UPDATE facts SET superseded_by = ?1 WHERE id = ?2",
-                    params![id, old_id],
-                )?;
-                let conflict_id = Uuid::new_v4().to_string();
-                conn.execute(
-                    r#"INSERT INTO conflict_log (id, timestamp, sync_source, topic, scope, scope_key, loser_id, loser_fact, winner_id, winner_fact, resolution)
-                       VALUES (?1,?2,'local',?3,?4,?5,?6,?7,?8,?9,'superseded')"#,
-                    params![
-                        conflict_id,
-                        now,
-                        topic,
-                        scope,
-                        scope_key,
-                        old_id,
-                        old_fact,
-                        id,
-                        fact
-                    ],
-                )?;
-            }
-
             conn.execute(
-                r#"INSERT INTO facts (id, topic, fact, scope, scope_key, source, confidence, created_at, updated_at, expires_at, content_hash, polarity, apply_when)
-                   VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?8,?9,?10,?11,?12)"#,
+                r#"INSERT INTO facts (id, topic, fact, scope, scope_key, source, confidence, created_at, updated_at, expires_at, content_hash, polarity, apply_when, valid_from, invalid_at)
+                   VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?8,?9,?10,?11,?12,?8,NULL)"#,
                 params![id, topic, fact, scope, scope_key, source, confidence, now, expires, content_hash, polarity, apply_when],
             )?;
+            if let Some(old_id) = &prior {
+                crate::temporal::link_fact_evolution(conn, &id, old_id, "evolved_from", now)?;
+            }
             Ok(())
         })?;
 
@@ -1721,7 +1716,14 @@ impl BrainStore {
         if ann_settings.enabled && !bm25_only && !query_embedding.is_empty() {
             if let Some(ann) = snapshot.ann.as_ref() {
                 if ann.is_active(ann_settings.min_index) {
-                    for (id, _) in ann.top_k(query_embedding, ann_settings.top_k) {
+                    let filter = repo_root.map(|root| crate::ann::AnnFilter {
+                        repo_root: Some(root),
+                    });
+                    for (id, _) in ann.top_k_filtered(
+                        query_embedding,
+                        ann_settings.top_k,
+                        filter.as_ref(),
+                    ) {
                         if candidate_ids.insert(id.clone()) {
                             if let Some(&idx) = snapshot.indexed_by_id.get(&id) {
                                 candidates.push(&snapshot.indexed[idx]);
@@ -1795,6 +1797,7 @@ impl BrainStore {
             let item_type = ItemType::parse(&row.item_type).unwrap_or(ItemType::Rule);
             let lexical =
                 crate::retrieval::lexical_overlap_score(query, &row.topic, &row.text);
+            let entity = crate::retrieval::entity_overlap_score(query, &row.topic, &row.text);
 
             let bm25_norm = bm25
                 .bm25_map
@@ -1809,9 +1812,9 @@ impl BrainStore {
                 .unwrap_or(0.0);
 
             let mut score = if bm25_only {
-                0.70 * bm25_norm + 0.30 * lexical
+                0.60 * bm25_norm + 0.25 * lexical + 0.15 * entity
             } else {
-                0.55 * cosine_sim + 0.25 * bm25_norm + 0.20 * lexical
+                0.50 * cosine_sim + 0.22 * bm25_norm + 0.18 * lexical + 0.10 * entity
             };
 
             if matches!(item_type, ItemType::Skill | ItemType::Agent) && lexical >= 0.2 {

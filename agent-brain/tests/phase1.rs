@@ -107,7 +107,7 @@ fn deduplicates_identical_facts() {
 }
 
 #[test]
-fn supersedes_same_topic_facts() {
+fn add_only_same_topic_facts_preserve_history() {
     let dir = TempDir::new().unwrap();
     let config = test_config(&dir);
     config.ensure_dirs().unwrap();
@@ -143,8 +143,10 @@ fn supersedes_same_topic_facts() {
 
     assert_ne!(v1.id, v2.id);
     let active: Vec<_> = store.list_facts(10).unwrap();
-    assert_eq!(active.len(), 1);
-    assert_eq!(active[0]["fact"], "Run clippy and fmt on every PR");
+    assert_eq!(active.len(), 2);
+    let facts: Vec<_> = active.iter().map(|f| f["fact"].as_str().unwrap()).collect();
+    assert!(facts.contains(&"Run clippy on every PR"));
+    assert!(facts.contains(&"Run clippy and fmt on every PR"));
 }
 
 #[test]

@@ -498,13 +498,10 @@ def handle_before_submit_prompt(_event: dict) -> dict:
     if in_mcp_offline(state):
         save_state(state)
         return {"continue": True}
-    save_state(
-        {
-            "needs_route": True,
-            "needs_route_since": time.time(),
-            "route_grace_until": 0,
-        }
-    )
+    state["needs_route"] = True
+    state["needs_route_since"] = time.time()
+    state["route_grace_until"] = 0
+    save_state(state)
     return {"continue": True}
 
 

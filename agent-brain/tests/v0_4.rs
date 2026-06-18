@@ -93,7 +93,7 @@ fn negative_memory_surfaces_in_must_apply() {
 }
 
 #[test]
-fn supersession_logs_conflict() {
+fn add_only_preserves_facts_without_supersede_conflict() {
     let dir = TempDir::new().unwrap();
     let config = test_config(&dir);
     config.ensure_dirs().unwrap();
@@ -127,9 +127,10 @@ fn supersession_logs_conflict() {
         )
         .unwrap();
 
+    let facts = store.list_facts(10).unwrap();
+    assert_eq!(facts.len(), 2);
     let conflicts = store.list_conflicts(10).unwrap();
-    assert_eq!(conflicts.len(), 1);
-    assert_eq!(conflicts[0]["resolution"], "superseded");
+    assert!(conflicts.is_empty());
 }
 
 #[test]

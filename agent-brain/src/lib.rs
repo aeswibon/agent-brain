@@ -32,6 +32,7 @@ pub mod operator_digest;
 pub mod onboarding;
 pub mod adoption;
 pub mod ann;
+pub mod temporal;
 pub mod docs;
 pub mod dashboard;
 pub mod stats;

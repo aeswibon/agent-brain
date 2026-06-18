@@ -128,6 +128,53 @@ pub fn fts_query_loose(query: &str) -> String {
     }
 }
 
+/// Normalize a token for keyword matching (light verb-stem / plural trim).
+pub fn normalize_token(token: &str) -> String {
+    let t = token.to_lowercase();
+    if t.len() > 4 && t.ends_with("ing") {
+        return t[..t.len() - 3].to_string();
+    }
+    if t.len() > 3 && t.ends_with("ed") {
+        return t[..t.len() - 2].to_string();
+    }
+    if t.len() > 2 && t.ends_with('s') && !t.ends_with("ss") {
+        return t[..t.len() - 1].to_string();
+    }
+    t
+}
+
+/// Entity-like tokens (CamelCase, snake_case, ALLCAPS) for multi-signal fusion.
+pub fn entity_tokens(text: &str) -> Vec<String> {
+    let mut out = HashSet::new();
+    for word in text.split(|c: char| !c.is_alphanumeric() && c != '_' && c != '-') {
+        if word.len() < 2 {
+            continue;
+        }
+        if word.chars().any(|c| c.is_uppercase()) || word.contains('_') {
+            out.insert(normalize_token(word));
+        }
+    }
+    out.into_iter().collect()
+}
+
+/// Fraction of query entities found in topic+body (Mem0-style entity signal).
+pub fn entity_overlap_score(query: &str, topic: &str, text: &str) -> f64 {
+    let entities = entity_tokens(query);
+    if entities.is_empty() {
+        return 0.0;
+    }
+    let hay = format!(
+        "{} {}",
+        topic.to_lowercase(),
+        text.to_lowercase()
+    );
+    let matched = entities
+        .iter()
+        .filter(|e| hay.contains(e.as_str()))
+        .count();
+    matched as f64 / entities.len() as f64
+}
+
 /// Minimum score for a recommendation to be shown (relative to top non-memory hit).
 pub fn minimum_recommendation_score(scored_top_non_memory: f64) -> f64 {
     if scored_top_non_memory <= 0.0 {
@@ -139,6 +186,12 @@ pub fn minimum_recommendation_score(scored_top_non_memory: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn entity_overlap_matches_camel_case() {
+        let score = entity_overlap_score("fix Vitest config", "testing", "Use Vitest for unit tests");
+        assert!(score > 0.0);
+    }
 
     #[test]
     fn expanded_terms_links_pr_and_pull_request() {
