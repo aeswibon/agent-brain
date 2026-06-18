@@ -724,10 +724,42 @@ async fn main() -> Result<()> {
                         eprintln!("Dry run — re-run with --apply to archive.");
                     }
                 }
+                "observe" => {
+                    let dry_run = args.iter().any(|a| a == "--dry-run");
+                    let embedder = agent_brain::embed::Embedder::with_model(
+                        agent_brain::embed::parse_embedding_model(&config.embedding_model),
+                    )?;
+                    let cfg = agent_brain::observation::ObservationConfig {
+                        min_facts_per_topic: brain_settings.observation.min_facts_per_topic,
+                        window_days: brain_settings.observation.window_days,
+                    };
+                    let report =
+                        agent_brain::observation::run_observations(&store, &embedder, &cfg, dry_run)?;
+                    println!("{}", serde_json::to_string_pretty(&report)?);
+                }
+                "extract" => {
+                    let dry_run = args.iter().any(|a| a == "--dry-run");
+                    let embedder = agent_brain::embed::Embedder::with_model(
+                        agent_brain::embed::parse_embedding_model(&config.embedding_model),
+                    )?;
+                    let cfg = agent_brain::trace_extract::TraceExtractConfig {
+                        confidence: brain_settings.trace_extract.confidence,
+                    };
+                    let report = agent_brain::trace_extract::run_trace_extract(
+                        &store,
+                        &embedder,
+                        &config.home,
+                        &cfg,
+                        dry_run,
+                    )?;
+                    println!("{}", serde_json::to_string_pretty(&report)?);
+                }
                 _ => {
                     eprintln!(
                         "Usage: agent-brain memory gc [--apply] [--force] [--stale-days N] [--very-stale-days N]"
                     );
+                    eprintln!("       agent-brain memory observe [--dry-run]");
+                    eprintln!("       agent-brain memory extract [--dry-run]");
                     std::process::exit(1);
                 }
             }
@@ -807,8 +839,16 @@ async fn main() -> Result<()> {
                     eprintln!("{err}");
                     std::process::exit(1);
                 }
+            } else if args.iter().any(|a| a == "--beam") {
+                let report = agent_brain::beam_eval::run_beam_eval_isolated()?;
+                println!("{}", serde_json::to_string_pretty(&report)?);
+                if let Err(err) = agent_brain::beam_eval::assert_beam_gate(&report) {
+                    eprintln!("{err}");
+                    std::process::exit(1);
+                }
             } else if !args.iter().any(|a| a == "--ci") {
                 eprintln!("Usage: agent-brain eval --ci [--live]");
+                eprintln!("       agent-brain eval --beam              BEAM memory+routing harness");
                 eprintln!("       agent-brain eval --skills-sh [--fixture-db PATH] [--seed] [--write PATH]");
                 eprintln!("  --ci            Run Recall@3 gate (default: isolated fixture DB)");
                 eprintln!("  --live          Use ~/.agent_brain brain.db (not for CI)");

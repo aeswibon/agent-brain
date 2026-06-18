@@ -77,6 +77,14 @@ impl WriteHandlerCtx {
             .as_ref()
             .map(serde_json::to_string)
             .transpose()?;
+        let temporal = if payload.valid_from.is_some() || payload.invalid_at.is_some() {
+            Some(crate::db::store::FactTemporal {
+                valid_from: payload.valid_from,
+                invalid_at: payload.invalid_at,
+            })
+        } else {
+            None
+        };
         let res = self.store.store_fact_full(
             &payload.topic,
             &payload.fact,
@@ -88,12 +96,38 @@ impl WriteHandlerCtx {
             &embedding,
             polarity,
             apply_when.as_deref(),
+            temporal.as_ref(),
         )?;
         self.cache.clear();
         self.store.bump_index_version().ok();
 
         if res.stored {
             let settings = crate::settings::AgentBrainSettings::load(&self.home);
+            if settings.observation.enabled {
+                let cfg = crate::observation::ObservationConfig {
+                    min_facts_per_topic: settings.observation.min_facts_per_topic,
+                    window_days: settings.observation.window_days,
+                };
+                if let Err(err) =
+                    crate::observation::run_observations(&self.store, &self.embedder, &cfg, false)
+                {
+                    tracing::warn!(target: "agent_brain::observation", "run failed: {err}");
+                }
+            }
+            if settings.trace_extract.enabled {
+                let cfg = crate::trace_extract::TraceExtractConfig {
+                    confidence: settings.trace_extract.confidence,
+                };
+                if let Err(err) = crate::trace_extract::run_trace_extract(
+                    &self.store,
+                    &self.embedder,
+                    &self.home,
+                    &cfg,
+                    false,
+                ) {
+                    tracing::warn!(target: "agent_brain::trace_extract", "run failed: {err}");
+                }
+            }
             if settings.sync.git.auto_push {
                 if let Err(err) = crate::sync::git_push(&self.store, &self.home, &settings.sync.git)
                 {

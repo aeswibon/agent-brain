@@ -5,6 +5,7 @@ use std::path::Path;
 use anyhow::{bail, Context, Result};
 use chrono::Utc;
 
+use crate::beam_eval::{assert_beam_gate, run_beam_eval_isolated, BeamEvalReport};
 use crate::bench::{assert_bench_gate, run_ci_bench, LatencyBenchReport};
 use crate::eval::{assert_ci_gate, run_ci_eval_isolated, EvalReport};
 use crate::graphify_bench::{assert_graphify_bench_gate, run_ci_graphify_bench, GraphifyBenchReport};
@@ -21,6 +22,7 @@ pub struct ProofReport {
     pub embedder: &'static str,
     pub fixture_skills: usize,
     pub eval: EvalReport,
+    pub beam: BeamEvalReport,
     pub latency: LatencyBenchReport,
     pub supervisor: SupervisorBenchReport,
     pub token_tools: TokenToolsBenchReport,
@@ -32,6 +34,9 @@ pub struct ProofReport {
 pub fn run_ci_proofs() -> Result<ProofReport> {
     let eval = run_ci_eval_isolated()?;
     assert_ci_gate(&eval)?;
+
+    let beam = run_beam_eval_isolated()?;
+    assert_beam_gate(&beam)?;
 
     let latency = run_ci_bench()?;
     assert_bench_gate(&latency)?;
@@ -60,6 +65,7 @@ pub fn run_ci_proofs() -> Result<ProofReport> {
         fixture_skills: latency.fixture_skills,
         passed: true,
         eval,
+        beam,
         latency,
         supervisor,
         token_tools,
@@ -92,6 +98,7 @@ pub fn write_supervisor_report(path: &Path, report: &SupervisorBenchReport) -> R
 
 pub fn assert_ci_proofs(report: &ProofReport) -> Result<()> {
     assert_ci_gate(&report.eval)?;
+    assert_beam_gate(&report.beam)?;
     assert_bench_gate(&report.latency)?;
     assert_supervisor_bench_gate(&report.supervisor)?;
     if !report.token_tools.passed {

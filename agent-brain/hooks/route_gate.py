@@ -514,7 +514,50 @@ def handle_post_tool_use(event: dict) -> dict:
     # Cursor Agent MCP tools (mcp_agent-brain_*) clear the gate via postToolUse,
     # not afterMCPExecution.
     handle_route_outcome(event)
+    maybe_log_tool_trace(event)
     return {}
+
+
+def extract_shell_command(event: dict) -> str | None:
+    for key in ("tool_input", "arguments", "args", "input"):
+        raw = event.get(key)
+        parsed = parse_json_value(raw)
+        if isinstance(parsed, dict):
+            for field in ("command", "cmd"):
+                value = parsed.get(field)
+                if isinstance(value, str) and value.strip():
+                    return value.strip()[:240]
+        elif isinstance(parsed, str) and parsed.strip():
+            return parsed.strip()[:240]
+    return None
+
+
+def maybe_log_tool_trace(event: dict) -> None:
+    if event.get("success") is False or event.get("error"):
+        return
+    tool = str(event.get("tool_name") or "").lower()
+    detail = None
+    path = None
+    if "shell" in tool or "terminal" in tool or tool in {"run_terminal_cmd", "bash"}:
+        detail = extract_shell_command(event)
+    elif any(x in tool for x in ("write", "strreplace", "search_replace", "edit")):
+        path = extract_read_path(event)
+        if path:
+            detail = f"edited {path}"
+    if not detail and not path:
+        return
+    state = load_state()
+    append_tool_event(
+        {
+            "timestamp": int(time.time() * 1000),
+            "tool_name": tool,
+            "path": path,
+            "detail": detail,
+            "tokens_used": 0,
+            "must_apply_active": bool(state.get("must_apply")),
+            "phase": state.get("route_phase"),
+        }
+    )
 
 
 def gate_tool_use(event: dict) -> dict:

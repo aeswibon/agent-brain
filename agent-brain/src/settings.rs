@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 const CONFIG_NAMES: &[&str] = &["config.yaml", "config.yml", "config.json"];
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct AgentBrainSettings {
     #[serde(default)]
     pub auto_update: AutoUpdateSettings,
@@ -16,6 +16,10 @@ pub struct AgentBrainSettings {
     pub upstream_mcp: UpstreamMcpSettings,
     #[serde(default)]
     pub memory_gc: MemoryGcSettings,
+    #[serde(default)]
+    pub observation: ObservationSettings,
+    #[serde(default)]
+    pub trace_extract: TraceExtractSettings,
     #[serde(default)]
     pub graphify: GraphifySettings,
     #[serde(default)]
@@ -43,6 +47,55 @@ impl Default for MemoryGcSettings {
         Self {
             stale_days: default_memory_gc_stale_days(),
             very_stale_days: default_memory_gc_very_stale_days(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ObservationSettings {
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default = "default_observation_min_facts")]
+    pub min_facts_per_topic: usize,
+    #[serde(default = "default_observation_window_days")]
+    pub window_days: u32,
+}
+
+fn default_observation_min_facts() -> usize {
+    3
+}
+
+fn default_observation_window_days() -> u32 {
+    90
+}
+
+impl Default for ObservationSettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            min_facts_per_topic: default_observation_min_facts(),
+            window_days: default_observation_window_days(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct TraceExtractSettings {
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default = "default_trace_extract_confidence")]
+    pub confidence: f64,
+}
+
+fn default_trace_extract_confidence() -> f64 {
+    0.75
+}
+
+impl Default for TraceExtractSettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            confidence: default_trace_extract_confidence(),
         }
     }
 }
@@ -426,6 +479,8 @@ impl AgentBrainSettings {
             sync: SyncSettings::default(),
             upstream_mcp: UpstreamMcpSettings::default(),
             memory_gc: MemoryGcSettings::default(),
+            observation: ObservationSettings::default(),
+            trace_extract: TraceExtractSettings::default(),
             graphify: GraphifySettings::default(),
             docs: DocsSettings::default(),
         }

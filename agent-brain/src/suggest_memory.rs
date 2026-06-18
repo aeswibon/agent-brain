@@ -56,6 +56,8 @@ pub fn approve_pending(engine: &Engine) -> Result<ApproveReport> {
             } else {
                 Some(apply_when.clone())
             },
+            valid_from: None,
+            invalid_at: None,
         },
     })?;
 

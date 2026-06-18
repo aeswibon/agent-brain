@@ -37,6 +37,8 @@ pub mod store_memory_payload {
         pub confidence: f64,
         pub polarity: Option<String>,
         pub apply_when: Option<Vec<String>>,
+        pub valid_from: Option<i64>,
+        pub invalid_at: Option<i64>,
     }
 }
 

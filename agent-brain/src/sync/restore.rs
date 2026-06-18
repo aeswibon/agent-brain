@@ -41,6 +41,7 @@ pub fn restore_conflict(
         &embedding,
         "positive",
         None,
+        None,
     )?;
 
     store.mark_conflict_restored(conflict_id)?;

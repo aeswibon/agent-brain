@@ -53,6 +53,7 @@ pub fn ingest_hook_events_since(store: &BrainStore, home: &Path, since_ms: i64) 
             &id,
             &record.tool_name,
             record.path.as_deref(),
+            record.detail.as_deref(),
             record.tokens_used,
             record.tokens_saved,
             record.savings_pct,

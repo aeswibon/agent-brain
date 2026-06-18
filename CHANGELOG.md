@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-06-18
+
+### Added
+
+- **`store_memory` temporal params** — optional `valid_from` / `invalid_at` (unix ms) on MCP `store_memory` for fact validity windows.
+- **Observation engine (Zep-inspired)** — synthesizes `obs/{topic}` facts from recurring memories (≥3 facts/topic); runs after `store_memory` and via `agent-brain memory observe [--dry-run]`.
+- **BEAM eval harness** — `agent-brain eval --beam` runs recall + temporal + must_apply + observation + `eval/queries.jsonl` suites (≥85% gate; included in `proofs --ci`).
+- **Trace extraction (Mem0-inspired)** — infers ADD-only facts from shell/config tool traces; `agent-brain memory extract [--dry-run]`; hooks log shell/write `detail` to `tool_events.jsonl`.
+- **`observation` / `trace_extract` settings** in `config.yaml`.
+
+### Fixed
+
+- **Temporal indexing** — inactive facts (`invalid_at` / future `valid_from`) are no longer inserted into `indexed_items`.
+
 ## [0.21.1] - 2026-06-18
 
 ### Fixed

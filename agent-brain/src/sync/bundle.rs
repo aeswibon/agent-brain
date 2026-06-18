@@ -226,6 +226,7 @@ fn import_one_fact(
         &embedding,
         &remote.polarity,
         apply_when_json.as_deref(),
+        None,
     )?;
 
     if let Some(local) = &local {

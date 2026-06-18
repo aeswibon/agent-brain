@@ -103,8 +103,12 @@ Token-efficient memory adapted from Zep & Mem0, implemented inside `brain.db` (n
 | **Filterable HNSW** | In-memory scope-aware ANN (≥256 nodes) with per-filter bridge edges — p95 ≤ 50ms on 2k index |
 | **Session digests** | Cross-IDE transcripts (Cursor, Codex, Gemini, OpenCode) surface only through `route_task` |
 | **Stateful hooks** | `must_apply` + phase persist across prompts until the next route |
+| **Observation engine** | Recurring facts (≥3/topic) auto-synthesize `obs/{topic}` must_apply candidates (Zep-inspired) |
+| **Temporal MCP** | `store_memory` accepts optional `valid_from` / `invalid_at` (unix ms) |
+| **BEAM eval** | `agent-brain eval --beam` — recall, temporal, must_apply, observation, jsonl routing suites |
+| **Trace extraction** | Mem0-style ADD-only facts from shell/package-manager traces (`memory extract`) |
 
-**Roadmap (next):** observation engine (auto-synthesize `must_apply` from recurring patterns), MCP `invalid_at` on `store_memory`, BEAM-scale eval harness.
+**Roadmap (next):** deeper tool-trace NLP extraction, cross-session BEAM fixtures from real transcripts.
 
 ---
 

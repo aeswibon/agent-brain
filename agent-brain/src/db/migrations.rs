@@ -191,6 +191,15 @@ pub fn run(conn: &Connection) -> rusqlite::Result<()> {
         conn.execute("UPDATE schema_version SET version = 11", [])?;
     }
 
+    let version: i64 = conn
+        .query_row("SELECT version FROM schema_version LIMIT 1", [], |r| r.get(0))
+        .unwrap_or(0);
+
+    if version < 12 {
+        migrate_v12(conn)?;
+        conn.execute("UPDATE schema_version SET version = 12", [])?;
+    }
+
     Ok(())
 }
 
@@ -429,6 +438,23 @@ fn migrate_v11(conn: &Connection) -> rusqlite::Result<()> {
         );
         CREATE INDEX IF NOT EXISTS idx_memory_kg_source ON memory_kg_edges(source_fact_id);
         CREATE INDEX IF NOT EXISTS idx_memory_kg_target ON memory_kg_edges(target_fact_id);
+        "#,
+    )?;
+    Ok(())
+}
+
+fn migrate_v12(conn: &Connection) -> rusqlite::Result<()> {
+    if !column_exists(conn, "tool_log", "detail")? {
+        conn.execute("ALTER TABLE tool_log ADD COLUMN detail TEXT", [])?;
+    }
+    conn.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS trace_extract_log (
+            tool_log_id TEXT PRIMARY KEY,
+            fact_id TEXT,
+            extracted_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_trace_extract_at ON trace_extract_log(extracted_at);
         "#,
     )?;
     Ok(())

@@ -91,6 +91,7 @@ pub fn log_native_tool_use(
         &id,
         tool_name,
         path,
+        None,
         tokens_used,
         tokens_saved,
         savings_pct,

@@ -654,6 +654,7 @@ impl BrainStore {
             embedding,
             polarity,
             None,
+            None,
         )
     }
 
@@ -669,6 +670,7 @@ impl BrainStore {
         embedding: &[f32],
         polarity: &str,
         apply_when: Option<&str>,
+        temporal: Option<&FactTemporal>,
     ) -> Result<StoreFactResult> {
         let polarity = if polarity == "negative" {
             "negative"
@@ -676,6 +678,13 @@ impl BrainStore {
             "positive"
         };
         let now = chrono::Utc::now().timestamp_millis();
+        let valid_from = temporal.and_then(|t| t.valid_from).unwrap_or(now);
+        let invalid_at = temporal.and_then(|t| t.invalid_at);
+        if let Some(until) = invalid_at {
+            if until <= valid_from {
+                anyhow::bail!("invalid_at must be after valid_from");
+            }
+        }
         let expires = now + 90 * 24 * 3600 * 1000;
         let id = Uuid::new_v4().to_string();
 
@@ -713,8 +722,23 @@ impl BrainStore {
         self.with_conn(|conn| {
             conn.execute(
                 r#"INSERT INTO facts (id, topic, fact, scope, scope_key, source, confidence, created_at, updated_at, expires_at, content_hash, polarity, apply_when, valid_from, invalid_at)
-                   VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?8,?9,?10,?11,?12,?8,NULL)"#,
-                params![id, topic, fact, scope, scope_key, source, confidence, now, expires, content_hash, polarity, apply_when],
+                   VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?8,?9,?10,?11,?12,?13,?14)"#,
+                params![
+                    id,
+                    topic,
+                    fact,
+                    scope,
+                    scope_key,
+                    source,
+                    confidence,
+                    now,
+                    expires,
+                    content_hash,
+                    polarity,
+                    apply_when,
+                    valid_from,
+                    invalid_at
+                ],
             )?;
             if let Some(old_id) = &prior {
                 crate::temporal::link_fact_evolution(conn, &id, old_id, "evolved_from", now)?;
@@ -726,24 +750,26 @@ impl BrainStore {
             .iter()
             .flat_map(|f| f.to_le_bytes())
             .collect();
-        self.with_conn(|conn| {
-            conn.execute(
-                r#"INSERT INTO indexed_items (id, item_type, topic, text, source_path, scope, scope_key, content_hash, embedding, updated_at)
-                   VALUES (?1,'memory',?2,?3,'',?4,?5,?6,?7,?8)
-                   ON CONFLICT(source_path, content_hash) DO UPDATE SET text=excluded.text, embedding=excluded.embedding, updated_at=excluded.updated_at"#,
-                params![
-                    Uuid::new_v4().to_string(),
-                    topic,
-                    fact,
-                    scope,
-                    scope_key,
-                    content_hash,
-                    blob,
-                    now
-                ],
-            )?;
-            Ok(())
-        })?;
+        if crate::temporal::is_fact_active(now, valid_from, invalid_at) {
+            self.with_conn(|conn| {
+                conn.execute(
+                    r#"INSERT INTO indexed_items (id, item_type, topic, text, source_path, scope, scope_key, content_hash, embedding, updated_at)
+                       VALUES (?1,'memory',?2,?3,'',?4,?5,?6,?7,?8)
+                       ON CONFLICT(source_path, content_hash) DO UPDATE SET text=excluded.text, embedding=excluded.embedding, updated_at=excluded.updated_at"#,
+                    params![
+                        Uuid::new_v4().to_string(),
+                        topic,
+                        fact,
+                        scope,
+                        scope_key,
+                        content_hash,
+                        blob,
+                        now
+                    ],
+                )?;
+                Ok(())
+            })?;
+        }
 
         self.invalidate_search_cache();
         Ok(StoreFactResult {
@@ -772,6 +798,86 @@ impl BrainStore {
                 })?
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(rows)
+        })
+    }
+
+    /// Topics with multiple active agent/user facts — candidates for observation synthesis.
+    pub fn list_recurring_memory_topics(
+        &self,
+        min_count: usize,
+        since_ms: i64,
+    ) -> Result<Vec<RecurringMemoryTopic>> {
+        let now = chrono::Utc::now().timestamp_millis();
+        self.with_conn(|conn| {
+            let sql = format!(
+                "SELECT topic, scope, scope_key, COUNT(*) as cnt
+                 FROM facts
+                 WHERE superseded_by IS NULL
+                   AND source NOT IN ('observation')
+                   AND topic NOT LIKE 'obs/%'
+                   AND updated_at >= ?1
+                   AND {}
+                 GROUP BY topic, scope, scope_key
+                 HAVING cnt >= ?2",
+                crate::temporal::active_fact_sql("?3")
+            );
+            let mut stmt = conn.prepare(&sql)?;
+            let groups: Vec<(String, String, Option<String>, usize)> = stmt
+                .query_map(params![since_ms, min_count as i64, now], |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get::<_, i64>(3)? as usize,
+                    ))
+                })?
+                .filter_map(|r| r.ok())
+                .collect();
+
+            let mut out = Vec::new();
+            for (topic, scope, scope_key, fact_count) in groups {
+                let detail_sql = format!(
+                    "SELECT fact, polarity, apply_when FROM facts
+                     WHERE topic = ?1 AND scope = ?2 AND IFNULL(scope_key,'') = IFNULL(?3,'')
+                       AND superseded_by IS NULL AND source NOT IN ('observation')
+                       AND {}
+                     ORDER BY updated_at DESC",
+                    crate::temporal::active_fact_sql("?4")
+                );
+                let mut detail = conn.prepare(&detail_sql)?;
+                let rows: Vec<(String, String, Option<String>)> = detail
+                    .query_map(params![topic, scope, scope_key, now], |row| {
+                        Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+                    })?
+                    .filter_map(|r| r.ok())
+                    .collect();
+                if rows.is_empty() {
+                    continue;
+                }
+                let latest_fact = rows[0].0.clone();
+                let negative_count = rows
+                    .iter()
+                    .filter(|(_, pol, _)| pol == "negative")
+                    .count();
+                let mut tag_set = std::collections::HashSet::new();
+                for (_, _, apply_when) in &rows {
+                    for tag in parse_apply_when(apply_when.as_deref()) {
+                        tag_set.insert(tag);
+                    }
+                }
+                let mut apply_when_tags: Vec<String> = tag_set.into_iter().collect();
+                apply_when_tags.sort();
+                out.push(RecurringMemoryTopic {
+                    topic,
+                    scope,
+                    scope_key,
+                    fact_count,
+                    latest_fact,
+                    negative_count,
+                    apply_when_tags,
+                });
+            }
+            Ok(out)
         })
     }
 
@@ -913,6 +1019,11 @@ impl BrainStore {
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(rows)
         })
+    }
+
+    pub fn prune_expired_facts(&self) -> Result<crate::temporal::PruneReport> {
+        let now = chrono::Utc::now().timestamp_millis();
+        self.with_conn(|conn| crate::temporal::prune_expired(conn, now))
     }
 
     pub fn fact_exists_by_hash(
@@ -1407,6 +1518,7 @@ impl BrainStore {
         id: &str,
         tool_name: &str,
         path: Option<&str>,
+        detail: Option<&str>,
         tokens_used: usize,
         tokens_saved: Option<usize>,
         savings_pct: Option<f64>,
@@ -1417,13 +1529,14 @@ impl BrainStore {
         let now = chrono::Utc::now().timestamp_millis();
         self.with_conn(|conn| {
             conn.execute(
-                r#"INSERT INTO tool_log (id, timestamp, tool_name, path, tokens_used, tokens_saved, savings_pct, must_apply_active, phase, route_log_id)
-                   VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)"#,
+                r#"INSERT INTO tool_log (id, timestamp, tool_name, path, detail, tokens_used, tokens_saved, savings_pct, must_apply_active, phase, route_log_id)
+                   VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)"#,
                 params![
                     id,
                     now,
                     tool_name,
                     path,
+                    detail,
                     tokens_used as i64,
                     tokens_saved.map(|n| n as i64),
                     savings_pct.map(|n| n.round() as i64),
@@ -1431,6 +1544,43 @@ impl BrainStore {
                     phase,
                     route_log_id,
                 ],
+            )?;
+            Ok(())
+        })
+    }
+
+    pub fn list_pending_tool_traces(&self, limit: usize) -> Result<Vec<ToolTraceRow>> {
+        self.with_conn(|conn| {
+            let mut stmt = conn.prepare(
+                r#"SELECT t.id, t.tool_name, t.path, t.detail
+                   FROM tool_log t
+                   LEFT JOIN trace_extract_log e ON e.tool_log_id = t.id
+                   WHERE e.tool_log_id IS NULL
+                   ORDER BY t.timestamp ASC
+                   LIMIT ?1"#,
+            )?;
+            let rows = stmt
+                .query_map(params![limit as i64], |row| {
+                    Ok(ToolTraceRow {
+                        id: row.get(0)?,
+                        tool_name: row.get(1)?,
+                        path: row.get(2)?,
+                        detail: row.get(3)?,
+                        scope_key: None,
+                    })
+                })?
+                .filter_map(|r| r.ok())
+                .collect();
+            Ok(rows)
+        })
+    }
+
+    pub fn mark_trace_extracted(&self, tool_log_id: &str, fact_id: Option<&str>) -> Result<()> {
+        let now = chrono::Utc::now().timestamp_millis();
+        self.with_conn(|conn| {
+            conn.execute(
+                "INSERT OR IGNORE INTO trace_extract_log (tool_log_id, fact_id, extracted_at) VALUES (?1, ?2, ?3)",
+                params![tool_log_id, fact_id, now],
             )?;
             Ok(())
         })
@@ -1902,6 +2052,9 @@ impl BrainStore {
                 if source == Some("user") || confidence >= 0.95 {
                     score += 0.08;
                 }
+                if source == Some("observation") {
+                    score += 0.10;
+                }
                 if polarity == Some("negative") {
                     score += 0.12;
                 }
@@ -2092,6 +2245,23 @@ pub struct SearchRow {
     pub embedding: Option<Vec<u8>>,
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+pub struct FactTemporal {
+    pub valid_from: Option<i64>,
+    pub invalid_at: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct RecurringMemoryTopic {
+    pub topic: String,
+    pub scope: String,
+    pub scope_key: Option<String>,
+    pub fact_count: usize,
+    pub latest_fact: String,
+    pub negative_count: usize,
+    pub apply_when_tags: Vec<String>,
+}
+
 pub struct StoreFactResult {
     pub id: String,
     pub stored: bool,
@@ -2157,11 +2327,22 @@ pub struct ToolEventRecord {
     pub timestamp: i64,
     pub tool_name: String,
     pub path: Option<String>,
+    #[serde(default)]
+    pub detail: Option<String>,
     pub tokens_used: usize,
     pub tokens_saved: Option<usize>,
     pub savings_pct: Option<f64>,
     pub must_apply_active: bool,
     pub phase: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ToolTraceRow {
+    pub id: String,
+    pub tool_name: String,
+    pub path: Option<String>,
+    pub detail: Option<String>,
+    pub scope_key: Option<String>,
 }
 
 #[derive(Debug, Clone)]

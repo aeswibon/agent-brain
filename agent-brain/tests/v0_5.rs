@@ -71,6 +71,7 @@ fn apply_when_surfaces_in_must_apply_when_phase_matches() {
             &emb,
             "positive",
             Some(r#"["phase:debugging"]"#),
+            None,
         )
         .unwrap();
 
@@ -222,6 +223,7 @@ fn user_source_memory_scores_higher_than_agent_source() {
             &emb,
             "positive",
             None,
+            None,
         )
         .unwrap();
     store
@@ -235,6 +237,7 @@ fn user_source_memory_scores_higher_than_agent_source() {
             &content_hash(&format!("{text}-user")),
             &emb,
             "positive",
+            None,
             None,
         )
         .unwrap();

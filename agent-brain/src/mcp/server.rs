@@ -97,6 +97,12 @@ struct StoreMemoryParams {
     polarity: Option<String>,
     #[serde(default)]
     apply_when: Option<Vec<String>>,
+    /// Unix timestamp in milliseconds when this fact becomes active.
+    #[serde(default)]
+    valid_from: Option<i64>,
+    /// Unix timestamp in milliseconds when this fact expires (archived by temporal prune).
+    #[serde(default)]
+    invalid_at: Option<i64>,
 }
 
 fn default_scope() -> String {
@@ -328,7 +334,7 @@ impl BrainMcp {
         json_result(resp)
     }
 
-    #[tool(description = "REQUIRED at task end for durable decisions. Max 50 words. No secrets. Requires route_task first in this turn.")]
+    #[tool(description = "REQUIRED at task end for durable decisions. Max 50 words. No secrets. Optional valid_from/invalid_at (unix ms). Requires route_task first in this turn.")]
     async fn store_memory(
         &self,
         params: Parameters<StoreMemoryParams>,
@@ -344,6 +350,14 @@ impl BrainMcp {
         }
         if word_count(&p.fact) > 50 {
             return Err(McpError::invalid_params("fact exceeds 50 words", None));
+        }
+        if let (Some(from), Some(until)) = (p.valid_from, p.invalid_at) {
+            if until <= from {
+                return Err(McpError::invalid_params(
+                    "invalid_at must be after valid_from",
+                    None,
+                ));
+            }
         }
 
         let scope_key = std::env::current_dir()
@@ -366,6 +380,8 @@ impl BrainMcp {
                     confidence: if p.confidence == 0.0 { 0.9 } else { p.confidence },
                     polarity,
                     apply_when: p.apply_when,
+                    valid_from: p.valid_from,
+                    invalid_at: p.invalid_at,
                 },
             })
             .map_err(|e| McpError::internal_error(format!("{e}"), None))?;
