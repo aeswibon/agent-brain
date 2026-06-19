@@ -15,6 +15,7 @@ name = "agent-brain"
 path = "src/main.rs"
 
 [dependencies]
+agent-body-core = { git = "https://github.com/autonomic-ai-dev/agent-body" }
 age = "0.11"
 anyhow = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
