@@ -1,0 +1,9 @@
+name: Setup protoc
+description: Install protoc for tonic/prost codegen (build.rs)
+
+runs:
+  using: composite
+  steps:
+    - uses: arduino/setup-protoc@v3
+      with:
+        repo-token: ${{ github.token }}
