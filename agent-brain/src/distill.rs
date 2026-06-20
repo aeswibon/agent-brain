@@ -1,6 +1,6 @@
 use anyhow::Result;
 use chrono::Utc;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -100,4 +100,154 @@ pub fn write_architecture_md(distilled: &DistilledArch, path: &Path) -> Result<(
     }
     std::fs::write(path, md)?;
     Ok(())
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ClusterStats {
+    pub clusters_found: usize,
+    pub items_clustered: usize,
+    pub facts_created: usize,
+    pub items_superseded: usize,
+    pub dry_run: bool,
+    pub threshold: f64,
+}
+
+pub fn cluster_and_summarize(
+    store: &crate::db::store::BrainStore,
+    threshold: f64,
+    dry_run: bool,
+) -> Result<ClusterStats> {
+    let items = store.load_searchable_items()?;
+    let mut by_topic: HashMap<String, Vec<(usize, &crate::db::store::SearchRow)>> = HashMap::new();
+
+    for (idx, item) in items.iter().enumerate() {
+        if item.embedding.is_none() {
+            continue;
+        }
+        by_topic
+            .entry(item.topic.clone())
+            .or_default()
+            .push((idx, item));
+    }
+
+    let mut clusters_found = 0usize;
+    let mut items_clustered = 0usize;
+    let mut facts_created = 0usize;
+    let mut items_superseded = 0usize;
+
+    for (_topic, group) in &by_topic {
+        if group.len() < 2 {
+            continue;
+        }
+
+        let embeds: Vec<Vec<f32>> = group
+            .iter()
+            .map(|(_, item)| crate::db::store::bytes_to_f32(item.embedding.as_ref().unwrap()))
+            .collect();
+
+        let n = group.len();
+        let mut parent: Vec<usize> = (0..n).collect();
+
+        fn find(parent: &mut [usize], x: usize) -> usize {
+            if parent[x] != x {
+                parent[x] = find(parent, parent[x]);
+            }
+            parent[x]
+        }
+        fn union(parent: &mut [usize], a: usize, b: usize) {
+            let ra = find(parent, a);
+            let rb = find(parent, b);
+            if ra != rb {
+                parent[ra] = rb;
+            }
+        }
+
+        for i in 0..n {
+            for j in (i + 1)..n {
+                let sim = crate::embed::cosine(&embeds[i], &embeds[j]);
+                if sim >= threshold {
+                    union(&mut parent, i, j);
+                }
+            }
+        }
+
+        let mut cluster_map: HashMap<usize, Vec<usize>> = HashMap::new();
+        for i in 0..n {
+            let root = find(&mut parent, i);
+            cluster_map.entry(root).or_default().push(i);
+        }
+
+        for (_root, members) in &cluster_map {
+            if members.len() < 2 {
+                continue;
+            }
+            clusters_found += 1;
+            items_clustered += members.len();
+
+            if dry_run {
+                continue;
+            }
+
+            let member_rows: Vec<&crate::db::store::SearchRow> =
+                members.iter().map(|&i| group[i].1).collect();
+
+            let combined: Vec<&str> = member_rows
+                .iter()
+                .map(|r| r.text.as_str())
+                .filter(|t| !t.is_empty())
+                .collect();
+            let combined_text = if combined.is_empty() {
+                "auto-merged cluster".to_string()
+            } else if combined.len() == 1 {
+                combined[0].to_string()
+            } else {
+                combined.join("; ")
+            };
+
+            let rows = store.list_facts(10_000)?;
+            let max_conf = member_rows
+                .iter()
+                .filter_map(|r| {
+                    rows.iter()
+                        .find(|f| f.get("topic").and_then(|v| v.as_str()) == Some(r.topic.as_str()))
+                })
+                .filter_map(|f| f.get("confidence").and_then(|v| v.as_f64()))
+                .fold(0.95f64, |acc, c| acc.max(c));
+
+            let result = store.store_fact(
+                &member_rows[0].topic,
+                &combined_text,
+                &member_rows[0].scope,
+                member_rows[0].scope_key.as_deref(),
+                max_conf.max(0.95),
+                "distill",
+                "",
+                &[],
+                "positive",
+            );
+
+            match result {
+                Ok(_meta) => {
+                    facts_created += 1;
+                    for row in &member_rows {
+                        if store.invalidate_fact(&row.id).is_ok() {
+                            items_superseded += 1;
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to store cluster fact: {}", e);
+                }
+            }
+        }
+    }
+
+    Ok(ClusterStats {
+        clusters_found,
+        items_clustered,
+        facts_created,
+        items_superseded,
+        dry_run,
+        threshold,
+    })
 }

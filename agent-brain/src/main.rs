@@ -1255,15 +1255,29 @@ async fn main() -> Result<()> {
             }
         }
         "distill" => {
-            let config = Config::load()?;
-            config.ensure_dirs()?;
-            let out = flag_value(&args, "--out")
-                .map(std::path::PathBuf::from)
-                .unwrap_or_else(|| std::path::PathBuf::from("ARCHITECTURE.md"));
-            let store = agent_brain::db::store::BrainStore::open(&config.db_path)?;
-            let distilled = agent_brain::distill::distill(&store)?;
-            agent_brain::distill::write_architecture_md(&distilled, &out)?;
-            println!("Architecture written to {}", out.display());
+            let is_clusters = args.get(2).map(|s| s.as_str()) == Some("clusters");
+            if is_clusters {
+                let config = Config::load()?;
+                config.ensure_dirs()?;
+                let threshold = flag_value(&args, "--threshold")
+                    .and_then(|v| v.parse::<f64>().ok())
+                    .unwrap_or(0.95);
+                let dry_run = has_flag(&args, "--dry-run");
+                let store = agent_brain::db::store::BrainStore::open(&config.db_path)?;
+                let stats =
+                    agent_brain::distill::cluster_and_summarize(&store, threshold, dry_run)?;
+                println!("{}", serde_json::to_string_pretty(&stats)?);
+            } else {
+                let config = Config::load()?;
+                config.ensure_dirs()?;
+                let out = flag_value(&args, "--out")
+                    .map(std::path::PathBuf::from)
+                    .unwrap_or_else(|| std::path::PathBuf::from("ARCHITECTURE.md"));
+                let store = agent_brain::db::store::BrainStore::open(&config.db_path)?;
+                let distilled = agent_brain::distill::distill(&store)?;
+                agent_brain::distill::write_architecture_md(&distilled, &out)?;
+                println!("Architecture written to {}", out.display());
+            }
         }
         "gc" => {
             let config = Config::load()?;
@@ -1289,6 +1303,10 @@ async fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+fn has_flag(args: &[String], flag: &str) -> bool {
+    args.iter().any(|a| a == flag)
 }
 
 fn flag_value(args: &[String], flag: &str) -> Option<String> {
