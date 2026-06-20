@@ -1,17 +1,21 @@
 # Changelog
 
-## [v] - 2026-06-20
-
-### Added
-- Added Mermaid charts to README
-
-
-All notable changes to this project are documented in this file.
+All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [0.28.2] - 2026-06-20
+
+### Added
+
+- Mermaid architecture charts in README (`d85897d`)
+
+### Changed
+
+- Autonomic ecosystem integration section in README (`e5ff7d7`)
 
 ## [0.28.1] - 2026-06-20
 
