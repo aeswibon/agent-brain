@@ -23,7 +23,7 @@ Use `agent-brain serve` only for debugging MCP outside Cursor.
 ## Quick setup
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/aeswibon/agent-brain/master/scripts/install.sh | bash -s -- --global
+curl -fsSL https://raw.githubusercontent.com/autonomic-ai-dev/agent-brain/master/scripts/install.sh | bash -s -- --global
 # restart Cursor → Settings → MCP → enable agent-brain
 agent-brain add affaan-m/ecc   # optional
 ```
@@ -64,7 +64,7 @@ auto_update:
     enabled: true
   mcp:
     enabled: true
-    repo: aeswibon/agent-brain
+    repo: autonomic-ai-dev/agent-brain
     bin_path: ~/.local/bin/agent-brain
     refresh_cursor: true
     restart_after_update: true
@@ -86,7 +86,7 @@ Environment overrides: `AGENT_BRAIN_AUTO_UPDATE`, `AGENT_BRAIN_AUTO_UPDATE_PACKA
 ### One-liner (recommended)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/aeswibon/agent-brain/master/scripts/install.sh | bash -s -- --global
+curl -fsSL https://raw.githubusercontent.com/autonomic-ai-dev/agent-brain/master/scripts/install.sh | bash -s -- --global
 ```
 
 ### From source
