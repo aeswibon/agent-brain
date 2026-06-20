@@ -18,7 +18,10 @@ fn language_for_path(path: &Path) -> Option<(Language, &'static str)> {
     let ext = path.extension()?.to_str()?;
     match ext {
         "rs" => Some((tree_sitter_rust::LANGUAGE.into(), "rust")),
-        "ts" => Some((tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(), "typescript")),
+        "ts" => Some((
+            tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
+            "typescript",
+        )),
         "tsx" => Some((tree_sitter_typescript::LANGUAGE_TSX.into(), "typescript")),
         "py" => Some((tree_sitter_python::LANGUAGE.into(), "python")),
         "go" => Some((tree_sitter_go::LANGUAGE.into(), "go")),

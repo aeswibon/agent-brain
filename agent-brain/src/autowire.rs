@@ -15,7 +15,9 @@ const INSTALL_META_FILE: &str = "install_meta.json";
 
 fn install_meta_path() -> PathBuf {
     let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    PathBuf::from(&home).join(INSTALL_META_DIR).join(INSTALL_META_FILE)
+    PathBuf::from(&home)
+        .join(INSTALL_META_DIR)
+        .join(INSTALL_META_FILE)
 }
 
 fn read_meta() -> Result<Option<InstallMeta>> {
@@ -59,13 +61,16 @@ fn patch_mcp_config(config_path: &Path, new_binary: &str) -> Result<bool> {
     let mut config: McpConfig = serde_json::from_str(&content)?;
 
     let mut changed = false;
-    let servers = config.mcp_servers.as_mut()
-        .or(config.servers.as_mut());
+    let servers = config.mcp_servers.as_mut().or(config.servers.as_mut());
 
     if let Some(servers) = servers {
         for (_name, server) in servers.iter_mut() {
             if server.command != new_binary {
-                tracing::info!("Patching MCP server command: {} -> {}", server.command, new_binary);
+                tracing::info!(
+                    "Patching MCP server command: {} -> {}",
+                    server.command,
+                    new_binary
+                );
                 server.command = new_binary.to_string();
                 changed = true;
             }
@@ -76,7 +81,11 @@ fn patch_mcp_config(config_path: &Path, new_binary: &str) -> Result<bool> {
         let backup = config_path.with_extension("agent-brain.bak.json");
         std::fs::copy(config_path, &backup)?;
         std::fs::write(config_path, serde_json::to_string_pretty(&config)?)?;
-        tracing::info!("Patched MCP config at {}, backup at {:?}", config_path.display(), backup);
+        tracing::info!(
+            "Patched MCP config at {}, backup at {:?}",
+            config_path.display(),
+            backup
+        );
     }
 
     Ok(changed)

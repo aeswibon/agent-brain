@@ -64,7 +64,10 @@ pub fn compute_stats(entries: &[DatasetEntry]) -> DatasetStats {
     stats.successful = entries.iter().filter(|e| e.outcome == "success").count() as u64;
 
     for entry in entries {
-        *stats.per_workflow.entry(entry.workflow_name.clone()).or_insert(0) += 1;
+        *stats
+            .per_workflow
+            .entry(entry.workflow_name.clone())
+            .or_insert(0) += 1;
         *stats.per_model.entry(entry.model.clone()).or_insert(0) += 1;
     }
 

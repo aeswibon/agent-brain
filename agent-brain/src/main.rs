@@ -842,11 +842,8 @@ async fn main() -> Result<()> {
                     let min_confidence = flag_value(&args, "--min-confidence")
                         .and_then(|v| v.parse::<f64>().ok())
                         .unwrap_or(0.8);
-                    let entries = agent_brain::dataset::export_dataset(
-                        &store,
-                        min_confidence,
-                        true,
-                    )?;
+                    let entries =
+                        agent_brain::dataset::export_dataset(&store, min_confidence, true)?;
                     let stats = agent_brain::dataset::compute_stats(&entries);
                     println!("{}", serde_json::to_string_pretty(&stats)?);
                 }

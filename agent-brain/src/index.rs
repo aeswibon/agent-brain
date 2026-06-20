@@ -54,9 +54,7 @@ pub fn sync_index(
                     );
                     let hash = content_hash(&text);
                     let source_path = symbol.file_path.clone();
-                    if store
-                        .indexed_item_current_hash(&source_path)?
-                        .as_deref()
+                    if store.indexed_item_current_hash(&source_path)?.as_deref()
                         == Some(hash.as_str())
                     {
                         continue;

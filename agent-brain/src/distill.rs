@@ -36,10 +36,7 @@ pub fn distill(store: &crate::db::store::BrainStore) -> Result<DistilledArch> {
         .into_iter()
         .map(|(topic, facts)| {
             let n = facts.len();
-            let sum: f64 = facts
-                .iter()
-                .filter_map(|f| f["confidence"].as_f64())
-                .sum();
+            let sum: f64 = facts.iter().filter_map(|f| f["confidence"].as_f64()).sum();
             let avg_conf = if n > 0 { sum / n as f64 } else { 0.0 };
             (topic, avg_conf, n)
         })
