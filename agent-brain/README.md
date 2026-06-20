@@ -92,7 +92,7 @@ curl -fsSL https://raw.githubusercontent.com/autonomic-ai-dev/agent-brain/master
 ### From source
 
 ```bash
-cargo install --git https://github.com/aeswibon/agent-brain --locked agent-brain
+cargo install --git https://github.com/autonomic-ai-dev/agent-brain --locked agent-brain
 agent-brain install --global
 ```
 
