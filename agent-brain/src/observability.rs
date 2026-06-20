@@ -101,7 +101,10 @@ pub fn log_native_tool_use(
     )
 }
 
-pub fn explain_last(store: &BrainStore, log_id: Option<&str>) -> Result<Option<ExplainLastContext>> {
+pub fn explain_last(
+    store: &BrainStore,
+    log_id: Option<&str>,
+) -> Result<Option<ExplainLastContext>> {
     let row = match log_id {
         Some(id) => store.get_retrieval_log(id)?,
         None => store.latest_retrieval_log()?,

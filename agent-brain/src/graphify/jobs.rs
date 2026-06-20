@@ -166,12 +166,16 @@ fn run_graphify_then_ingest(
 ) -> Result<super::ingest::IngestReport> {
     let graph_path = repo_root.join("graphify-out").join("graph.json");
     let mut cmd = Command::new(graphify_bin);
-    cmd.current_dir(repo_root).stdout(Stdio::null()).stderr(Stdio::piped());
+    cmd.current_dir(repo_root)
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped());
     if incremental && graph_path.exists() {
         cmd.arg("--update");
     }
     cmd.arg(".");
-    let output = cmd.output().with_context(|| format!("run {graphify_bin}"))?;
+    let output = cmd
+        .output()
+        .with_context(|| format!("run {graphify_bin}"))?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         bail!("graphify failed: {stderr}");

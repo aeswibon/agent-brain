@@ -7,9 +7,7 @@ use uuid::Uuid;
 use crate::db::store::BrainStore;
 
 use super::repos::touch_ingest;
-use super::types::{
-    node_id_str, GraphJson, GraphifyAnalysis, GraphJsonEdge, GraphJsonNode,
-};
+use super::types::{node_id_str, GraphJson, GraphJsonEdge, GraphJsonNode, GraphifyAnalysis};
 
 pub fn ingest_repo(store: &BrainStore, home: &Path, repo_root: &Path) -> Result<IngestReport> {
     let report = ingest_graph_at_path(store, repo_root)?;
@@ -61,7 +59,9 @@ pub struct IngestReport {
 }
 
 fn load_god_nodes(repo_root: &Path) -> Vec<String> {
-    let path = repo_root.join("graphify-out").join(".graphify_analysis.json");
+    let path = repo_root
+        .join("graphify-out")
+        .join(".graphify_analysis.json");
     let Ok(raw) = fs::read_to_string(path) else {
         return Vec::new();
     };
@@ -94,10 +94,7 @@ fn normalize_nodes(nodes: &[GraphJsonNode], gods: &[String]) -> Vec<CodeGraphNod
         .iter()
         .map(|n| {
             let graphify_id = node_id_str(&n.id);
-            let label = n
-                .label
-                .clone()
-                .unwrap_or_else(|| graphify_id.clone());
+            let label = n.label.clone().unwrap_or_else(|| graphify_id.clone());
             let community_id = n.community.or(n.community_id);
             let is_god_node = gods.iter().any(|g| g == &label || g == &graphify_id);
             CodeGraphNodeRow {

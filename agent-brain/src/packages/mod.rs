@@ -7,10 +7,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::Config;
 
-mod curated;
 mod bundles;
-pub use curated::{list_aliases, lookup_alias, resolve_package_inputs, CuratedAliasInfo, ResolvedAlias};
+mod curated;
 pub use bundles::install_bundled;
+pub use curated::{
+    list_aliases, lookup_alias, resolve_package_inputs, CuratedAliasInfo, ResolvedAlias,
+};
 
 const REGISTRY_FILE: &str = "packages.json";
 
@@ -124,13 +126,14 @@ pub fn package_name(source: &PackageSource) -> String {
 }
 
 pub fn git_url(source: &PackageSource) -> String {
-    format!(
-        "https://github.com/{}/{}.git",
-        source.owner, source.repo
-    )
+    format!("https://github.com/{}/{}.git", source.owner, source.repo)
 }
 
-pub fn add_package(config: &Config, source_input: &str, git_ref: Option<&str>) -> Result<PackageRecord> {
+pub fn add_package(
+    config: &Config,
+    source_input: &str,
+    git_ref: Option<&str>,
+) -> Result<PackageRecord> {
     config.ensure_dirs()?;
     let mut source = parse_source(source_input)?;
     if let Some(r) = git_ref {

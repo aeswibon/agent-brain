@@ -161,7 +161,10 @@ fn session_id_from_jsonl_path(source: SessionSource, path: &Path) -> String {
 }
 
 fn gemini_brain_uuid(path: &Path) -> Option<String> {
-    let parts: Vec<_> = path.components().map(|c| c.as_os_str().to_string_lossy()).collect();
+    let parts: Vec<_> = path
+        .components()
+        .map(|c| c.as_os_str().to_string_lossy())
+        .collect();
     for (i, part) in parts.iter().enumerate() {
         if part == "brain" {
             if let Some(uuid) = parts.get(i + 1) {
@@ -175,7 +178,10 @@ fn gemini_brain_uuid(path: &Path) -> Option<String> {
 }
 
 fn cursor_transcript_uuid(path: &Path) -> Option<String> {
-    let parts: Vec<_> = path.components().map(|c| c.as_os_str().to_string_lossy()).collect();
+    let parts: Vec<_> = path
+        .components()
+        .map(|c| c.as_os_str().to_string_lossy())
+        .collect();
     for (i, part) in parts.iter().enumerate() {
         if part == "agent-transcripts" {
             if let Some(uuid) = parts.get(i + 1) {
@@ -185,9 +191,7 @@ fn cursor_transcript_uuid(path: &Path) -> Option<String> {
             }
         }
     }
-    path.file_stem()
-        .and_then(|s| s.to_str())
-        .map(String::from)
+    path.file_stem().and_then(|s| s.to_str()).map(String::from)
 }
 
 fn is_recent_enough(path: &Path, max_age_days: u64) -> bool {
@@ -203,7 +207,9 @@ fn is_recent_enough(path: &Path, max_age_days: u64) -> bool {
     age.as_secs() <= max_age_days * 24 * 3600
 }
 
-pub fn count_by_source(sessions: &[SessionTranscript]) -> std::collections::HashMap<SessionSource, usize> {
+pub fn count_by_source(
+    sessions: &[SessionTranscript],
+) -> std::collections::HashMap<SessionSource, usize> {
     let mut counts = std::collections::HashMap::new();
     for s in sessions {
         *counts.entry(s.source).or_insert(0) += 1;
@@ -228,9 +234,8 @@ mod tests {
 
     #[test]
     fn cursor_uuid_from_transcript_path() {
-        let path = PathBuf::from(
-            "/home/u/.cursor/projects/foo/agent-transcripts/abc-123/abc-123.jsonl",
-        );
+        let path =
+            PathBuf::from("/home/u/.cursor/projects/foo/agent-transcripts/abc-123/abc-123.jsonl");
         assert_eq!(cursor_transcript_uuid(&path).as_deref(), Some("abc-123"));
     }
 }

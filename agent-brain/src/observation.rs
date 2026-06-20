@@ -112,7 +112,11 @@ fn synthesize_fact(group: &RecurringMemoryTopic) -> String {
     )
 }
 
-fn link_observation_sources(store: &BrainStore, obs_fact_id: &str, group: &RecurringMemoryTopic) -> Result<()> {
+fn link_observation_sources(
+    store: &BrainStore,
+    obs_fact_id: &str,
+    group: &RecurringMemoryTopic,
+) -> Result<()> {
     let source_ids = store.list_active_fact_ids_for_topic(
         &group.topic,
         &group.scope,
@@ -122,12 +126,7 @@ fn link_observation_sources(store: &BrainStore, obs_fact_id: &str, group: &Recur
         if source_id == obs_fact_id {
             continue;
         }
-        store.insert_fact_lineage(
-            obs_fact_id,
-            "fact",
-            &source_id,
-            "synthesized_from",
-        )?;
+        store.insert_fact_lineage(obs_fact_id, "fact", &source_id, "synthesized_from")?;
     }
     Ok(())
 }
@@ -170,13 +169,8 @@ mod tests {
                 .unwrap();
         }
 
-        let report = run_observations(
-            &store,
-            &embedder,
-            &ObservationConfig::default(),
-            false,
-        )
-        .unwrap();
+        let report =
+            run_observations(&store, &embedder, &ObservationConfig::default(), false).unwrap();
         assert_eq!(report.synthesized, 1);
         assert!(report.topics.iter().any(|t| t == "obs/testing"));
 

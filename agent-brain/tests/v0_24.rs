@@ -64,13 +64,7 @@ fn observation_records_source_lineage() {
             )
             .unwrap();
     }
-    run_observations(
-        &store,
-        &embedder,
-        &ObservationConfig::default(),
-        false,
-    )
-    .unwrap();
+    run_observations(&store, &embedder, &ObservationConfig::default(), false).unwrap();
     let facts = store.list_facts(10).unwrap();
     let obs = facts
         .iter()

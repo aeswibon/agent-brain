@@ -16,8 +16,8 @@ fn parse_gemini_line(line: &str) -> Option<String> {
         return None;
     }
     let content = v.get("content").and_then(|c| c.as_str())?;
-    let text = extract_xml_tag(content, "USER_REQUEST")
-        .unwrap_or_else(|| content.trim().to_string());
+    let text =
+        extract_xml_tag(content, "USER_REQUEST").unwrap_or_else(|| content.trim().to_string());
     let cleaned = strip_user_query_tags(&text).trim().to_string();
     if cleaned.is_empty() {
         None

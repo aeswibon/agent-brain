@@ -96,11 +96,8 @@ pub fn cloud_pull(
         bail!("cloud artifact missing manifest.json");
     }
 
-    let import = engine.import_bundle_queued(
-        tmp.path(),
-        MergePolicy::NewerWins,
-        SyncSource::Cloud,
-    )?;
+    let import =
+        engine.import_bundle_queued(tmp.path(), MergePolicy::NewerWins, SyncSource::Cloud)?;
 
     store.set_cloud_last_pull()?;
     let missing_secrets = secrets::missing_secret_names(store)?;
@@ -177,7 +174,9 @@ fn artifact_exists(_home: &Path, settings: &CloudSyncSettings) -> Result<bool> {
         return Ok(false);
     }
     if settings.provider == "local" {
-        return Ok(PathBuf::from(&settings.bucket).join(&settings.key).is_file());
+        return Ok(PathBuf::from(&settings.bucket)
+            .join(&settings.key)
+            .is_file());
     }
     match build_operator(settings) {
         Ok(operator) => Ok(operator.blocking().stat(&settings.key).is_ok()),

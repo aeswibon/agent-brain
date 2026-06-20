@@ -145,13 +145,7 @@ fn observation_surfaces_must_apply_when_tags_match() {
             .unwrap();
     }
 
-    let report = run_observations(
-        &store,
-        &embedder,
-        &ObservationConfig::default(),
-        false,
-    )
-    .unwrap();
+    let report = run_observations(&store, &embedder, &ObservationConfig::default(), false).unwrap();
     assert_eq!(report.synthesized, 1);
 
     let engine = Engine::new_with_store(config.clone(), Arc::clone(&store)).unwrap();
@@ -174,7 +168,10 @@ fn observation_surfaces_must_apply_when_tags_match() {
 
     assert!(
         resp.must_apply.iter().any(|m| m.topic.starts_with("obs/"))
-            || resp.relevant_memory.iter().any(|m| m.topic.starts_with("obs/")),
+            || resp
+                .relevant_memory
+                .iter()
+                .any(|m| m.topic.starts_with("obs/")),
         "observation memory should surface in route output"
     );
 }

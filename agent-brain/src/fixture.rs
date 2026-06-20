@@ -113,7 +113,11 @@ pub fn stamp_fixture_meta(
 }
 
 /// Checkpoint WAL and write a portable single-file SQLite DB.
-pub fn export_fixture_db(store: &BrainStore, source_db_path: &Path, write_path: &Path) -> Result<()> {
+pub fn export_fixture_db(
+    store: &BrainStore,
+    source_db_path: &Path,
+    write_path: &Path,
+) -> Result<()> {
     store.checkpoint_wal()?;
     if let Some(parent) = write_path.parent() {
         std::fs::create_dir_all(parent)?;
@@ -149,9 +153,7 @@ pub fn read_fixture_meta(fixture_path: &Path) -> Result<FixtureDbMeta> {
         .get_meta("fixture_snapshot_skills")?
         .and_then(|s| s.parse().ok())
         .unwrap_or(0);
-    let generated_at = store
-        .get_meta("fixture_generated_at")?
-        .unwrap_or_default();
+    let generated_at = store.get_meta("fixture_generated_at")?.unwrap_or_default();
     Ok(FixtureDbMeta {
         kind,
         recipe_version,

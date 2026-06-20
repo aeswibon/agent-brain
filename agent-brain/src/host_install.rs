@@ -75,22 +75,37 @@ pub fn install_host(target: HostTarget, exe: &Path, quiet: bool) -> Result<Vec<P
     match target {
         HostTarget::All => {
             let mut paths = Vec::new();
-            paths.extend(install_host(HostTarget::Cursor { global: true }, exe, true)?);
+            paths.extend(install_host(
+                HostTarget::Cursor { global: true },
+                exe,
+                true,
+            )?);
             paths.extend(install_host(HostTarget::ClaudeDesktop, exe, true)?);
             paths.extend(install_host(HostTarget::VsCode { user: true }, exe, true)?);
-            paths.extend(install_host(HostTarget::ClaudeCode { user: true }, exe, true)?);
-            paths.extend(install_host(HostTarget::OpenCode { user: true }, exe, true)?);
+            paths.extend(install_host(
+                HostTarget::ClaudeCode { user: true },
+                exe,
+                true,
+            )?);
+            paths.extend(install_host(
+                HostTarget::OpenCode { user: true },
+                exe,
+                true,
+            )?);
             paths.extend(install_host(HostTarget::Codex { user: true }, exe, true)?);
             paths.extend(install_host(HostTarget::Gemini { user: true }, exe, true)?);
-            paths.extend(install_host(HostTarget::Antigravity { user: true }, exe, true)?);
+            paths.extend(install_host(
+                HostTarget::Antigravity { user: true },
+                exe,
+                true,
+            )?);
             if !quiet {
                 println!("Installed agent-brain MCP for: cursor, claude-desktop, vscode, claude-code, opencode, codex, gemini, antigravity");
             }
             Ok(paths)
         }
-        HostTarget::Cursor { global } => crate::install::configure_cursor(global, exe, quiet).map(|_| {
-            vec![crate::install::mcp_config_path(global).expect("cursor mcp path")]
-        }),
+        HostTarget::Cursor { global } => crate::install::configure_cursor(global, exe, quiet)
+            .map(|_| vec![crate::install::mcp_config_path(global).expect("cursor mcp path")]),
         HostTarget::ClaudeDesktop => install_claude_desktop(exe, quiet),
         HostTarget::VsCode { user } => install_vscode(exe, user, quiet),
         HostTarget::ClaudeCode { user } => install_claude_code(exe, user, quiet),
@@ -142,7 +157,10 @@ pub fn claude_desktop_config_path() -> Result<PathBuf> {
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
-        Ok(home.join(".config").join("Claude").join("claude_desktop_config.json"))
+        Ok(home
+            .join(".config")
+            .join("Claude")
+            .join("claude_desktop_config.json"))
     }
 }
 
@@ -169,7 +187,11 @@ pub fn vscode_mcp_path(user: bool) -> Result<PathBuf> {
         }
         #[cfg(not(any(target_os = "macos", target_os = "windows")))]
         {
-            return Ok(home.join(".config").join("Code").join("User").join("mcp.json"));
+            return Ok(home
+                .join(".config")
+                .join("Code")
+                .join("User")
+                .join("mcp.json"));
         }
     }
 
@@ -245,17 +267,18 @@ pub fn antigravity_config_paths(user: bool) -> Result<Vec<PathBuf>> {
     if user {
         let home = dirs::home_dir().context("home directory")?;
         return Ok(vec![
-            home.join(".gemini").join("antigravity").join("mcp_config.json"),
+            home.join(".gemini")
+                .join("antigravity")
+                .join("mcp_config.json"),
             home.join(".gemini").join("config").join("mcp_config.json"),
         ]);
     }
     let cwd = std::env::current_dir().context("current working directory")?;
     let root = crate::config::find_repo_root(&cwd).unwrap_or(cwd);
-    Ok(vec![
-        root.join(".gemini")
-            .join("antigravity")
-            .join("mcp_config.json"),
-    ])
+    Ok(vec![root
+        .join(".gemini")
+        .join("antigravity")
+        .join("mcp_config.json")])
 }
 
 fn install_gemini(exe: &Path, user: bool, quiet: bool) -> Result<Vec<PathBuf>> {
@@ -298,7 +321,9 @@ fn install_antigravity(exe: &Path, user: bool, quiet: bool) -> Result<Vec<PathBu
         } else {
             println!("  Project scope: .gemini/antigravity/mcp_config.json at repository root.");
         }
-        println!("  In Antigravity: Settings → Customizations → Refresh MCP servers (or /mcp in CLI).");
+        println!(
+            "  In Antigravity: Settings → Customizations → Refresh MCP servers (or /mcp in CLI)."
+        );
         println!("  Route gate hooks: shared ~/.gemini/settings.json (BeforeAgent / BeforeTool).");
     }
     Ok(written)
@@ -496,7 +521,11 @@ fn toml_string(value: &str) -> String {
 pub fn merge_codex_config_toml(content: &str, mcp_block: &str) -> String {
     let lines: Vec<&str> = content.lines().collect();
     if let Some((start, end)) = find_toml_section_range(&lines, "mcp_servers.agent-brain") {
-        let mut out: Vec<String> = lines[..start].to_vec().into_iter().map(str::to_string).collect();
+        let mut out: Vec<String> = lines[..start]
+            .to_vec()
+            .into_iter()
+            .map(str::to_string)
+            .collect();
         if start > 0 && lines[start - 1].trim() == CODEX_MCP_MARKER {
             out.pop();
         }
@@ -778,7 +807,12 @@ fn install_claude_code_rule(user: bool, quiet: bool) -> Result<()> {
         fs::create_dir_all(&rules_dir)?;
         rules_dir.join("agent-brain.md")
     };
-    write_host_instructions(&path, CLAUDE_CODE_AGENT_BRAIN_INSTRUCTIONS, quiet, "Claude Code")?;
+    write_host_instructions(
+        &path,
+        CLAUDE_CODE_AGENT_BRAIN_INSTRUCTIONS,
+        quiet,
+        "Claude Code",
+    )?;
     Ok(())
 }
 
@@ -834,7 +868,9 @@ fn install_claude_code(exe: &Path, user: bool, quiet: bool) -> Result<Vec<PathBu
     if !quiet {
         println!("Installed Claude Code MCP at {}", path.display());
         if user {
-            println!("  User scope: ~/.claude.json (not settings.json — that file ignores mcpServers).");
+            println!(
+                "  User scope: ~/.claude.json (not settings.json — that file ignores mcpServers)."
+            );
         } else {
             println!("  Project scope: .mcp.json at repository root.");
         }
@@ -923,11 +959,7 @@ mod tests {
 
     #[test]
     fn host_target_parses_antigravity_flag() {
-        let args = vec![
-            "install".into(),
-            "--antigravity".into(),
-            "--global".into(),
-        ];
+        let args = vec!["install".into(), "--antigravity".into(), "--global".into()];
         assert_eq!(
             HostTarget::from_args(&args),
             HostTarget::Antigravity { user: true }
@@ -946,8 +978,12 @@ mod tests {
     fn antigravity_global_paths_include_shared_config() {
         let paths = antigravity_config_paths(true).unwrap();
         assert_eq!(paths.len(), 2);
-        assert!(paths[0].to_string_lossy().contains("antigravity/mcp_config.json"));
-        assert!(paths[1].to_string_lossy().contains("config/mcp_config.json"));
+        assert!(paths[0]
+            .to_string_lossy()
+            .contains("antigravity/mcp_config.json"));
+        assert!(paths[1]
+            .to_string_lossy()
+            .contains("config/mcp_config.json"));
     }
 
     #[test]
@@ -1001,11 +1037,7 @@ approval_policy = "on-request"
 
     #[test]
     fn host_target_parses_flags() {
-        let args = vec![
-            "install".into(),
-            "--claude-code".into(),
-            "--global".into(),
-        ];
+        let args = vec!["install".into(), "--claude-code".into(), "--global".into()];
         assert_eq!(
             HostTarget::from_args(&args),
             HostTarget::ClaudeCode { user: true }

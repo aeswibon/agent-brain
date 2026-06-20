@@ -7,7 +7,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 
-use super::{PackageRecord, PackageRegistry, packages_dir};
+use super::{packages_dir, PackageRecord, PackageRegistry};
 use crate::config::Config;
 
 pub fn install_bundled(config: &Config, bundle: &str) -> Result<PackageRecord> {

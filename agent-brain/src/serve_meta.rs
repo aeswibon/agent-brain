@@ -51,10 +51,7 @@ pub fn load(home: &Path) -> Option<ServeMeta> {
 }
 
 pub fn binary_version(path: &Path) -> Option<String> {
-    let output = Command::new(path)
-        .arg("version")
-        .output()
-        .ok()?;
+    let output = Command::new(path).arg("version").output().ok()?;
     if !output.status.success() {
         return None;
     }
@@ -88,10 +85,7 @@ pub fn process_alive(pid: u32) -> bool {
 
 pub fn assess(home: &Path, mcp_binary: Option<&Path>) -> ServeHealth {
     let meta = load(home);
-    let process_alive = meta
-        .as_ref()
-        .map(|m| process_alive(m.pid))
-        .unwrap_or(false);
+    let process_alive = meta.as_ref().map(|m| process_alive(m.pid)).unwrap_or(false);
 
     let disk_exe = mcp_binary.map(|p| p.display().to_string());
     let disk_version = mcp_binary.and_then(binary_version);
@@ -99,9 +93,7 @@ pub fn assess(home: &Path, mcp_binary: Option<&Path>) -> ServeHealth {
     let stale = match (&meta, &disk_version) {
         (Some(m), Some(disk)) if process_alive => m.version != *disk,
         (Some(m), None) if process_alive => {
-            mcp_binary.is_some_and(|p| {
-                fs::canonicalize(p).ok() != fs::canonicalize(&m.exe).ok()
-            })
+            mcp_binary.is_some_and(|p| fs::canonicalize(p).ok() != fs::canonicalize(&m.exe).ok())
         }
         _ => false,
     };

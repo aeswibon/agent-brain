@@ -2,10 +2,13 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
-use agent_brain::cache::{fingerprint_open_files, fingerprint_query, route_cache_key, CacheKey, QueryEmbeddingCache, TurnCache};
+use agent_brain::cache::{
+    fingerprint_open_files, fingerprint_query, route_cache_key, CacheKey, QueryEmbeddingCache,
+    TurnCache,
+};
 use agent_brain::config::Config;
-use agent_brain::db::RouteLatencyStats;
 use agent_brain::db::store::{content_hash, looks_like_secret, BrainStore};
+use agent_brain::db::RouteLatencyStats;
 use agent_brain::embed::{deterministic_embedding, Embedder};
 use agent_brain::engine::Engine;
 use agent_brain::tokens::estimate_tokens;
@@ -151,12 +154,36 @@ fn add_only_same_topic_facts_preserve_history() {
 
 #[test]
 fn turn_cache_ignores_open_files_when_configured() {
-    let key_a = route_cache_key("repo", "implement", "implementing", &["src/a.rs".into()], "fix bug", 1, true);
-    let key_b = route_cache_key("repo", "implement", "implementing", &["src/b.rs".into()], "fix bug", 1, true);
+    let key_a = route_cache_key(
+        "repo",
+        "implement",
+        "implementing",
+        &["src/a.rs".into()],
+        "fix bug",
+        1,
+        true,
+    );
+    let key_b = route_cache_key(
+        "repo",
+        "implement",
+        "implementing",
+        &["src/b.rs".into()],
+        "fix bug",
+        1,
+        true,
+    );
     assert_eq!(key_a.open_files_fp, key_b.open_files_fp);
     assert_eq!(key_a.query_fp, key_b.query_fp);
 
-    let key_c = route_cache_key("repo", "implement", "implementing", &["src/a.rs".into()], "fix bug", 1, false);
+    let key_c = route_cache_key(
+        "repo",
+        "implement",
+        "implementing",
+        &["src/a.rs".into()],
+        "fix bug",
+        1,
+        false,
+    );
     assert_ne!(key_a.open_files_fp, key_c.open_files_fp);
 }
 
@@ -190,7 +217,8 @@ fn truncates_context_to_token_budget() {
     let embedder = test_embedder();
 
     for i in 0..20 {
-        let text = format!("Long rule number {i} with enough text to consume token budget quickly.");
+        let text =
+            format!("Long rule number {i} with enough text to consume token budget quickly.");
         let emb = deterministic_embedding(&text);
         store
             .upsert_indexed_item(
@@ -209,12 +237,7 @@ fn truncates_context_to_token_budget() {
     let engine = Engine::new_with_store(config.clone(), Arc::new(store)).unwrap();
 
     let resp = engine
-        .get_context(
-            "routing rules",
-            None,
-            30,
-            &[ItemType::Rule],
-        )
+        .get_context("routing rules", None, 30, &[ItemType::Rule])
         .unwrap();
 
     assert!(resp.truncated || resp.items.len() < 20);
@@ -279,10 +302,7 @@ fn routes_skill_with_matching_description_over_unrelated_skill() {
     let cooking_desc = "Weeknight pasta recipes and baking tips for home cooks";
     let query = "let's review the changes on the PR";
 
-    for (topic, text) in [
-        ("code-review", review_desc),
-        ("cooking-tips", cooking_desc),
-    ] {
+    for (topic, text) in [("code-review", review_desc), ("cooking-tips", cooking_desc)] {
         let emb = deterministic_embedding(&format!("{topic} {text}"));
         store
             .upsert_indexed_item(
@@ -348,11 +368,11 @@ fn dedupes_duplicate_skill_names_in_route_task() {
     let weak = "unrelated cooking recipes and gardening tips";
 
     for (path, text) in [
-        ("/packages/ecc/skills/react-patterns/SKILL.md", strong.as_str()),
         (
-            "/packages/other/skills/react-patterns/SKILL.md",
-            weak,
+            "/packages/ecc/skills/react-patterns/SKILL.md",
+            strong.as_str(),
         ),
+        ("/packages/other/skills/react-patterns/SKILL.md", weak),
     ] {
         let emb = deterministic_embedding(text);
         store
@@ -394,14 +414,15 @@ fn dedupes_duplicate_skill_names_in_route_task() {
         .map(|s| s.name.as_str())
         .collect();
     assert_eq!(
-        skill_names.iter().filter(|n| **n == "react-patterns").count(),
+        skill_names
+            .iter()
+            .filter(|n| **n == "react-patterns")
+            .count(),
         1
     );
-    assert!(
-        resp.recommended_skills[0]
-            .path
-            .contains("/packages/ecc/skills/react-patterns/")
-    );
+    assert!(resp.recommended_skills[0]
+        .path
+        .contains("/packages/ecc/skills/react-patterns/"));
 }
 
 #[test]

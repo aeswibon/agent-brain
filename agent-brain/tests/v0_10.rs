@@ -98,7 +98,14 @@ fn promote_approve_writes_skill_file() {
         )
         .unwrap();
 
-    let staged = promote_fact_to_skill(&store, &config.home, Some(&stored.id), None, Some("error-patterns")).unwrap();
+    let staged = promote_fact_to_skill(
+        &store,
+        &config.home,
+        Some(&stored.id),
+        None,
+        Some("error-patterns"),
+    )
+    .unwrap();
     let path = approve_staging(&store, &staged.staging_id).unwrap();
     assert!(path.exists());
     let body = std::fs::read_to_string(path).unwrap();
@@ -128,7 +135,10 @@ fn promote_reject_marks_staging_rejected() {
         .unwrap();
     let staged = promote_fact_to_skill(&store, &config.home, Some(&stored.id), None, None).unwrap();
     reject_staging(&store, &staged.staging_id).unwrap();
-    let row = store.get_skill_staging(&staged.staging_id).unwrap().unwrap();
+    let row = store
+        .get_skill_staging(&staged.staging_id)
+        .unwrap()
+        .unwrap();
     assert_eq!(row.status, "rejected");
 }
 
@@ -292,11 +302,16 @@ fn skills_sh_eval_passes_on_committed_fixture_db() {
         agent_brain::skills_sh::run_skills_sh_eval(&snapshot, &golden, Some(&fixture)).unwrap();
     agent_brain::skills_sh::assert_skills_sh_gate(&report).unwrap();
     assert_eq!(report.index_mode, "fixture-db");
-    assert_eq!(report.simulated_index_size, agent_brain::skills_sh::SKILLS_SH_SIMULATED_INDEX);
+    assert_eq!(
+        report.simulated_index_size,
+        agent_brain::skills_sh::SKILLS_SH_SIMULATED_INDEX
+    );
     assert!(report.snapshot_skills >= 3);
     assert_eq!(
         report.filler_skills,
-        report.simulated_index_size.saturating_sub(report.snapshot_skills)
+        report
+            .simulated_index_size
+            .saturating_sub(report.snapshot_skills)
     );
 }
 
@@ -431,7 +446,11 @@ fn supervisor_bundle_routes_token_efficient_skill() {
             None,
         )
         .unwrap();
-    let skill_names: Vec<_> = resp.recommended_skills.iter().map(|s| s.name.as_str()).collect();
+    let skill_names: Vec<_> = resp
+        .recommended_skills
+        .iter()
+        .map(|s| s.name.as_str())
+        .collect();
     assert!(
         skill_names.iter().any(|n| *n == "token-efficient-ops"),
         "expected token-efficient-ops in {:?}",

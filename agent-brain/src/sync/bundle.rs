@@ -111,10 +111,8 @@ pub fn export_bundle(store: &BrainStore, home: &Path, dest: Option<&Path>) -> Re
     };
 
     let out_dir = dest.map(PathBuf::from).unwrap_or_else(|| {
-        home.join("export").join(format!(
-            "sync-bundle-{}",
-            chrono::Utc::now().timestamp()
-        ))
+        home.join("export")
+            .join(format!("sync-bundle-{}", chrono::Utc::now().timestamp()))
     });
     fs::create_dir_all(&out_dir).context("create bundle dir")?;
 

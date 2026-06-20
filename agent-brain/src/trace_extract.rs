@@ -58,7 +58,10 @@ impl Default for TraceExtractConfig {
     }
 }
 
-pub fn explain_pending_traces(store: &BrainStore, home: &std::path::Path) -> Result<Vec<TraceExtractExplanation>> {
+pub fn explain_pending_traces(
+    store: &BrainStore,
+    home: &std::path::Path,
+) -> Result<Vec<TraceExtractExplanation>> {
     let since_ms = store
         .get_meta("last_trace_extract_ms")?
         .and_then(|v| v.parse::<i64>().ok())
@@ -249,12 +252,18 @@ struct TraceCandidate {
     apply_when: Option<String>,
 }
 
-fn candidate_from_trace(row: &ToolTraceRow) -> Option<(TraceCandidate, &'static str, &'static str)> {
+fn candidate_from_trace(
+    row: &ToolTraceRow,
+) -> Option<(TraceCandidate, &'static str, &'static str)> {
     let detail = row.detail.as_deref().unwrap_or("").trim();
     let path = row.path.as_deref().unwrap_or("").trim();
 
     if let Some(c) = match_package_manager(detail) {
-        return Some((c, "package_manager", "Matched npm/pnpm/yarn/bun install or add command"));
+        return Some((
+            c,
+            "package_manager",
+            "Matched npm/pnpm/yarn/bun install or add command",
+        ));
     }
     if let Some(c) = match_pip_install(detail) {
         return Some((c, "pip_install", "Matched pip/pip3 install command"));
@@ -269,10 +278,18 @@ fn candidate_from_trace(row: &ToolTraceRow) -> Option<(TraceCandidate, &'static 
         return Some((c, "brew_install", "Matched brew install formula"));
     }
     if let Some(c) = match_config_edit(path, detail) {
-        return Some((c, "config_edit", "Matched known test/build config file edit"));
+        return Some((
+            c,
+            "config_edit",
+            "Matched known test/build config file edit",
+        ));
     }
     if let Some(c) = match_test_runner(detail) {
-        return Some((c, "test_runner", "Matched shell trace invoking a test runner"));
+        return Some((
+            c,
+            "test_runner",
+            "Matched shell trace invoking a test runner",
+        ));
     }
     if let Some(c) = match_make_target(detail) {
         return Some((c, "make_target", "Matched make release/test/build target"));
@@ -403,7 +420,9 @@ fn match_test_runner(detail: &str) -> Option<TraceCandidate> {
 
 fn match_make_target(detail: &str) -> Option<TraceCandidate> {
     static RE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
-    let re = RE.get_or_init(|| Regex::new(r"(?i)make\s+(release-macos|release|test|proofs)").expect("regex"));
+    let re = RE.get_or_init(|| {
+        Regex::new(r"(?i)make\s+(release-macos|release|test|proofs)").expect("regex")
+    });
     let caps = re.captures(detail)?;
     let target = caps.get(1)?.as_str();
     Some(TraceCandidate {

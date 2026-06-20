@@ -37,7 +37,9 @@ pub fn learn_from_url(
 ) -> Result<LearnReport> {
     let settings = crate::settings::AgentBrainSettings::load(&engine.config.home);
     if !settings.docs.enabled {
-        anyhow::bail!("docs learning is disabled — set docs.enabled: true in ~/.agent_brain/config.yaml");
+        anyhow::bail!(
+            "docs learning is disabled — set docs.enabled: true in ~/.agent_brain/config.yaml"
+        );
     }
     learn_with_settings(
         &engine.store,
@@ -76,8 +78,11 @@ pub fn learn_with_settings(
         .unwrap_or_else(|| infer_topic(url, title.as_deref()));
     let cached_path = cache_path(home, url, &topic)?;
     if !dry_run {
-        fs::write(&cached_path, format!("# {topic}\n\nSource: {url}\n\n{plain}\n"))
-            .with_context(|| format!("write {}", cached_path.display()))?;
+        fs::write(
+            &cached_path,
+            format!("# {topic}\n\nSource: {url}\n\n{plain}\n"),
+        )
+        .with_context(|| format!("write {}", cached_path.display()))?;
     }
 
     let chunks = chunk_words(&plain, settings.chunk_words, settings.max_chunks);

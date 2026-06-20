@@ -57,10 +57,7 @@ pub fn resolve_env_map(env: &HashMap<String, String>) -> Result<HashMap<String, 
 
 pub fn resolve_env_value(raw: &str) -> Result<String> {
     let trimmed = raw.trim();
-    if let Some(inner) = trimmed
-        .strip_prefix("${")
-        .and_then(|s| s.strip_suffix('}'))
-    {
+    if let Some(inner) = trimmed.strip_prefix("${").and_then(|s| s.strip_suffix('}')) {
         return secrets::get_secret(inner)?
             .with_context(|| format!("missing secret {inner} for upstream MCP env"));
     }
@@ -71,10 +68,7 @@ pub fn secret_names_from_env(env: &HashMap<String, String>) -> Vec<String> {
     let mut names = Vec::new();
     for value in env.values() {
         let trimmed = value.trim();
-        if let Some(inner) = trimmed
-            .strip_prefix("${")
-            .and_then(|s| s.strip_suffix('}'))
-        {
+        if let Some(inner) = trimmed.strip_prefix("${").and_then(|s| s.strip_suffix('}')) {
             names.push(inner.to_string());
         }
     }

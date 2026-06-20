@@ -20,13 +20,10 @@ pub fn discover_sessions(db_path: &Path, max_age_days: u64) -> Result<Vec<Sessio
              LIMIT ?2",
         )
         .context("prepare session list")?;
-    let rows = stmt.query_map(
-        rusqlite::params![cutoff_ms, MAX_SESSIONS as i64],
-        |row| {
-            let id: String = row.get(0)?;
-            Ok(id)
-        },
-    )?;
+    let rows = stmt.query_map(rusqlite::params![cutoff_ms, MAX_SESSIONS as i64], |row| {
+        let id: String = row.get(0)?;
+        Ok(id)
+    })?;
 
     let mut out = Vec::new();
     for id in rows.flatten() {

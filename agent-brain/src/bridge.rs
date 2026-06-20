@@ -80,7 +80,11 @@ fn compute_route_confidence(resp: &RouteTaskResponse, scored: &[ScoredItem]) -> 
     .filter(|v| *v)
     .count() as f64
         / 4.0;
-    let must_apply_boost = if resp.must_apply.is_empty() { 0.0 } else { 0.12 };
+    let must_apply_boost = if resp.must_apply.is_empty() {
+        0.0
+    } else {
+        0.12
+    };
     ((signal * 0.72) + (coverage * 0.28) + must_apply_boost).clamp(0.0, 1.0)
 }
 

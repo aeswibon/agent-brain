@@ -6,8 +6,14 @@ use regex::Regex;
 pub fn fetch_url(url: &str, max_bytes: usize) -> Result<Vec<u8>> {
     let max_bytes = max_bytes.max(4096).min(5_000_000);
     let response = ureq::get(url)
-        .header("User-Agent", "agent-brain/0.18 (+https://github.com/aeswibon/agent-brain)")
-        .header("Accept", "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.8")
+        .header(
+            "User-Agent",
+            "agent-brain/0.18 (+https://github.com/aeswibon/agent-brain)",
+        )
+        .header(
+            "Accept",
+            "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.8",
+        )
         .call()
         .with_context(|| format!("GET {url}"))?;
     let status = response.status().as_u16();

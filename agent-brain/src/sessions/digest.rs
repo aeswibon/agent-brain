@@ -94,19 +94,17 @@ fn session_content_hash(session: &SessionTranscript) -> Result<String> {
         let joined = msgs.join("\n");
         return Ok(format!("{:x}", Sha256::digest(joined.as_bytes())));
     }
-    Ok(format!("{:x}", Sha256::digest(session.session_id.as_bytes())))
+    Ok(format!(
+        "{:x}",
+        Sha256::digest(session.session_id.as_bytes())
+    ))
 }
 
 fn build_digest(source: &str, messages: &[String]) -> String {
     let topics: Vec<String> = messages
         .iter()
         .take(5)
-        .map(|m| {
-            m.split_whitespace()
-                .take(8)
-                .collect::<Vec<_>>()
-                .join(" ")
-        })
+        .map(|m| m.split_whitespace().take(8).collect::<Vec<_>>().join(" "))
         .collect();
 
     let last = messages.last().map(|s| s.as_str()).unwrap_or("");
@@ -183,6 +181,7 @@ mod tests {
             ann_enabled: true,
             ann_min_index: 1_500,
             ann_top_k: 100,
+            workflow_dirs: vec![],
         }
     }
 
@@ -210,7 +209,9 @@ mod tests {
         let store = BrainStore::open(&config.db_path).unwrap();
         let embedder = Embedder::deterministic();
 
-        let gemini_root = dir.path().join(".gemini/cli/brain/uuid-1/.system_generated/logs");
+        let gemini_root = dir
+            .path()
+            .join(".gemini/cli/brain/uuid-1/.system_generated/logs");
         std::fs::create_dir_all(&gemini_root).unwrap();
         let transcript = gemini_root.join("transcript.jsonl");
         std::fs::write(
@@ -222,14 +223,10 @@ mod tests {
         let n = ingest_session_digests(&store, &embedder, &config).unwrap();
         assert_eq!(n, 1);
         let facts = store.list_facts(10).unwrap();
-        assert!(
-            facts
-                .iter()
-                .any(|f| f["topic"]
-                    .as_str()
-                    .unwrap_or("")
-                    .starts_with("session-digest-gemini-"))
-        );
+        assert!(facts.iter().any(|f| f["topic"]
+            .as_str()
+            .unwrap_or("")
+            .starts_with("session-digest-gemini-")));
         std::env::remove_var("AGENT_BRAIN_SESSION_HOME");
     }
 }

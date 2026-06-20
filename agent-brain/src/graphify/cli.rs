@@ -64,13 +64,7 @@ pub fn run_cli(engine: &Arc<Engine>, cli: GraphifyCli) -> Result<()> {
             } else {
                 JobMode::Update
             };
-            let job_id = enqueue_job(
-                engine,
-                &repo,
-                JobTrigger::Manual,
-                mode,
-                &graphify_bin,
-            )?;
+            let job_id = enqueue_job(engine, &repo, JobTrigger::Manual, mode, &graphify_bin)?;
             println!("queued graphify job {job_id}");
         }
         "job" => {

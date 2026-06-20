@@ -1,7 +1,7 @@
-use anyhow::Result;
-use serde::{Deserialize, Serialize};
 use crate::engine::Engine;
 use crate::types::{GetContextResponse, ItemType};
+use anyhow::Result;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeContextParams {
@@ -27,16 +27,7 @@ pub fn get_context_for_node(
         params.task_description,
     );
 
-    let include_types = &[
-        ItemType::Rule,
-        ItemType::Skill,
-        ItemType::Agent,
-    ];
+    let include_types = &[ItemType::Rule, ItemType::Skill, ItemType::Agent];
 
-    engine.get_context(
-        &query,
-        None,
-        max_tokens,
-        include_types,
-    )
+    engine.get_context(&query, None, max_tokens, include_types)
 }

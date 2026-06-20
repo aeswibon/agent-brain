@@ -508,7 +508,12 @@ impl AgentBrainSettings {
 
 fn env_disabled(key: &str) -> bool {
     std::env::var(key)
-        .map(|v| matches!(v.to_ascii_lowercase().as_str(), "0" | "false" | "no" | "off"))
+        .map(|v| {
+            matches!(
+                v.to_ascii_lowercase().as_str(),
+                "0" | "false" | "no" | "off"
+            )
+        })
         .unwrap_or(false)
 }
 

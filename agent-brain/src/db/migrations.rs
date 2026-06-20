@@ -102,7 +102,9 @@ pub fn run(conn: &Connection) -> rusqlite::Result<()> {
     }
 
     let version: i64 = conn
-        .query_row("SELECT version FROM schema_version LIMIT 1", [], |r| r.get(0))
+        .query_row("SELECT version FROM schema_version LIMIT 1", [], |r| {
+            r.get(0)
+        })
         .unwrap_or(0);
 
     if version < 2 {
@@ -111,7 +113,9 @@ pub fn run(conn: &Connection) -> rusqlite::Result<()> {
     }
 
     let version: i64 = conn
-        .query_row("SELECT version FROM schema_version LIMIT 1", [], |r| r.get(0))
+        .query_row("SELECT version FROM schema_version LIMIT 1", [], |r| {
+            r.get(0)
+        })
         .unwrap_or(0);
 
     if version < 3 {
@@ -120,7 +124,9 @@ pub fn run(conn: &Connection) -> rusqlite::Result<()> {
     }
 
     let version: i64 = conn
-        .query_row("SELECT version FROM schema_version LIMIT 1", [], |r| r.get(0))
+        .query_row("SELECT version FROM schema_version LIMIT 1", [], |r| {
+            r.get(0)
+        })
         .unwrap_or(0);
 
     if version < 4 {
@@ -129,7 +135,9 @@ pub fn run(conn: &Connection) -> rusqlite::Result<()> {
     }
 
     let version: i64 = conn
-        .query_row("SELECT version FROM schema_version LIMIT 1", [], |r| r.get(0))
+        .query_row("SELECT version FROM schema_version LIMIT 1", [], |r| {
+            r.get(0)
+        })
         .unwrap_or(0);
 
     if version < 5 {
@@ -138,7 +146,9 @@ pub fn run(conn: &Connection) -> rusqlite::Result<()> {
     }
 
     let version: i64 = conn
-        .query_row("SELECT version FROM schema_version LIMIT 1", [], |r| r.get(0))
+        .query_row("SELECT version FROM schema_version LIMIT 1", [], |r| {
+            r.get(0)
+        })
         .unwrap_or(0);
 
     if version < 6 {
@@ -147,7 +157,9 @@ pub fn run(conn: &Connection) -> rusqlite::Result<()> {
     }
 
     let version: i64 = conn
-        .query_row("SELECT version FROM schema_version LIMIT 1", [], |r| r.get(0))
+        .query_row("SELECT version FROM schema_version LIMIT 1", [], |r| {
+            r.get(0)
+        })
         .unwrap_or(0);
 
     if version < 7 {
@@ -156,7 +168,9 @@ pub fn run(conn: &Connection) -> rusqlite::Result<()> {
     }
 
     let version: i64 = conn
-        .query_row("SELECT version FROM schema_version LIMIT 1", [], |r| r.get(0))
+        .query_row("SELECT version FROM schema_version LIMIT 1", [], |r| {
+            r.get(0)
+        })
         .unwrap_or(0);
 
     if version < 8 {
@@ -165,7 +179,9 @@ pub fn run(conn: &Connection) -> rusqlite::Result<()> {
     }
 
     let version: i64 = conn
-        .query_row("SELECT version FROM schema_version LIMIT 1", [], |r| r.get(0))
+        .query_row("SELECT version FROM schema_version LIMIT 1", [], |r| {
+            r.get(0)
+        })
         .unwrap_or(0);
 
     if version < 9 {
@@ -174,7 +190,9 @@ pub fn run(conn: &Connection) -> rusqlite::Result<()> {
     }
 
     let version: i64 = conn
-        .query_row("SELECT version FROM schema_version LIMIT 1", [], |r| r.get(0))
+        .query_row("SELECT version FROM schema_version LIMIT 1", [], |r| {
+            r.get(0)
+        })
         .unwrap_or(0);
 
     if version < 10 {
@@ -183,7 +201,9 @@ pub fn run(conn: &Connection) -> rusqlite::Result<()> {
     }
 
     let version: i64 = conn
-        .query_row("SELECT version FROM schema_version LIMIT 1", [], |r| r.get(0))
+        .query_row("SELECT version FROM schema_version LIMIT 1", [], |r| {
+            r.get(0)
+        })
         .unwrap_or(0);
 
     if version < 11 {
@@ -192,7 +212,9 @@ pub fn run(conn: &Connection) -> rusqlite::Result<()> {
     }
 
     let version: i64 = conn
-        .query_row("SELECT version FROM schema_version LIMIT 1", [], |r| r.get(0))
+        .query_row("SELECT version FROM schema_version LIMIT 1", [], |r| {
+            r.get(0)
+        })
         .unwrap_or(0);
 
     if version < 12 {
@@ -201,7 +223,9 @@ pub fn run(conn: &Connection) -> rusqlite::Result<()> {
     }
 
     let version: i64 = conn
-        .query_row("SELECT version FROM schema_version LIMIT 1", [], |r| r.get(0))
+        .query_row("SELECT version FROM schema_version LIMIT 1", [], |r| {
+            r.get(0)
+        })
         .unwrap_or(0);
 
     if version < 13 {
@@ -338,7 +362,10 @@ fn migrate_v6(conn: &Connection) -> rusqlite::Result<()> {
 
 fn migrate_v7(conn: &Connection) -> rusqlite::Result<()> {
     if !column_exists(conn, "retrieval_log", "index_total")? {
-        conn.execute("ALTER TABLE retrieval_log ADD COLUMN index_total INTEGER", [])?;
+        conn.execute(
+            "ALTER TABLE retrieval_log ADD COLUMN index_total INTEGER",
+            [],
+        )?;
     }
     if !column_exists(conn, "retrieval_log", "saved_pct")? {
         conn.execute("ALTER TABLE retrieval_log ADD COLUMN saved_pct INTEGER", [])?;

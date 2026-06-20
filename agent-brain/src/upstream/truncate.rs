@@ -147,7 +147,9 @@ mod tests {
 
     #[test]
     fn truncates_large_array_without_broken_json() {
-        let items: Vec<Value> = (0..200).map(|i| json!({"id": i, "title": format!("issue-{i}")})).collect();
+        let items: Vec<Value> = (0..200)
+            .map(|i| json!({"id": i, "title": format!("issue-{i}")}))
+            .collect();
         let value = Value::Array(items);
         let (out, truncated) = truncate_value(&value, 80);
         assert!(truncated);

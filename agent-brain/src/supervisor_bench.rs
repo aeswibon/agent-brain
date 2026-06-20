@@ -114,9 +114,7 @@ fn setup_supervisor_engine() -> Result<(Arc<Engine>, TempDir)> {
     let engine = Arc::new(Engine::new_with_store(config, store)?);
     let indexed = engine.bootstrap(None)?;
     if indexed < 3 {
-        bail!(
-            "expected supervisor pack indexed, got {indexed} (skills seeded: {skills})"
-        );
+        bail!("expected supervisor pack indexed, got {indexed} (skills seeded: {skills})");
     }
     Ok((engine, dir))
 }
@@ -162,11 +160,9 @@ pub fn run_supervisor_bench_on_engine(engine: &Engine) -> Result<SupervisorBench
         let saved_pct = token_savings(&resp).map(|s| s.saved_pct).unwrap_or(0);
         saved_pcts.push(saved_pct);
 
-        let skill_hit = scenario.expect_skill.is_none_or(|expected| {
-            resp.recommended_skills
-                .iter()
-                .any(|s| s.name == expected)
-        });
+        let skill_hit = scenario
+            .expect_skill
+            .is_none_or(|expected| resp.recommended_skills.iter().any(|s| s.name == expected));
         if scenario.expect_skill.is_some() {
             skill_checks += 1;
             if skill_hit {
@@ -174,9 +170,9 @@ pub fn run_supervisor_bench_on_engine(engine: &Engine) -> Result<SupervisorBench
             }
         }
 
-        let must_apply_hit = scenario.expect_must_apply.is_none_or(|expected| {
-            resp.must_apply.iter().any(|m| m.topic == expected)
-        });
+        let must_apply_hit = scenario
+            .expect_must_apply
+            .is_none_or(|expected| resp.must_apply.iter().any(|m| m.topic == expected));
         if scenario.expect_must_apply.is_some() {
             must_apply_checks += 1;
             if must_apply_hit {

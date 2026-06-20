@@ -276,15 +276,9 @@ where
     F: Fn(&crate::types::RouteTaskResponse) -> Vec<String>,
 {
     let golden: Vec<(&str, &str)> = if suite == "memory" {
-        MEMORY_GOLDEN
-            .iter()
-            .map(|c| (c.query, c.topic))
-            .collect()
+        MEMORY_GOLDEN.iter().map(|c| (c.query, c.topic)).collect()
     } else {
-        SKILL_GOLDEN
-            .iter()
-            .map(|c| (c.query, c.topic))
-            .collect()
+        SKILL_GOLDEN.iter().map(|c| (c.query, c.topic)).collect()
     };
 
     let mut passed = 0usize;
@@ -330,15 +324,7 @@ fn seed_golden_facts(store: &Arc<BrainStore>) -> Result<()> {
         let emb = deterministic_embedding(case.fact);
         let hash = content_hash(case.fact);
         store.store_fact(
-            case.topic,
-            case.fact,
-            "global",
-            None,
-            0.95,
-            "eval",
-            &hash,
-            &emb,
-            "positive",
+            case.topic, case.fact, "global", None, 0.95, "eval", &hash, &emb, "positive",
         )?;
     }
     store.bump_index_version()?;

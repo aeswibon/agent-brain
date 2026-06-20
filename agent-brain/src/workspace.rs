@@ -62,14 +62,7 @@ pub fn infer_phase(message: &str) -> String {
         return "reviewing".into();
     }
     if [
-        "fix",
-        "debug",
-        "error",
-        "bug",
-        "fail",
-        "broken",
-        "crash",
-        "issue",
+        "fix", "debug", "error", "bug", "fail", "broken", "crash", "issue",
     ]
     .iter()
     .any(|k| lower.contains(k))
@@ -159,14 +152,7 @@ pub fn infer_task_kind(message: &str) -> crate::types::TaskKind {
         return crate::types::TaskKind::Architecture;
     }
     if [
-        "fix",
-        "debug",
-        "error",
-        "bug",
-        "fail",
-        "broken",
-        "crash",
-        "issue",
+        "fix", "debug", "error", "bug", "fail", "broken", "crash", "issue",
     ]
     .iter()
     .any(|k| lower.contains(k))
@@ -210,8 +196,14 @@ mod tests {
     #[test]
     fn infer_task_kind_maps_verification() {
         use crate::types::TaskKind;
-        assert_eq!(infer_task_kind("run BEAM proofs in CI"), TaskKind::Verification);
-        assert_eq!(infer_task_kind("implement grpc server"), TaskKind::Implementing);
+        assert_eq!(
+            infer_task_kind("run BEAM proofs in CI"),
+            TaskKind::Verification
+        );
+        assert_eq!(
+            infer_task_kind("implement grpc server"),
+            TaskKind::Implementing
+        );
     }
 
     #[test]

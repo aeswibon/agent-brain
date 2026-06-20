@@ -136,7 +136,11 @@ pub fn gemini_hooks_dir(user: bool) -> Result<PathBuf> {
 pub fn opencode_hooks_dir(user: bool) -> Result<PathBuf> {
     if user {
         let home = dirs::home_dir().context("home directory")?;
-        return Ok(home.join(".config").join("opencode").join("hooks").join("agent-brain"));
+        return Ok(home
+            .join(".config")
+            .join("opencode")
+            .join("hooks")
+            .join("agent-brain"));
     }
     let cwd = std::env::current_dir().context("current working directory")?;
     let root = crate::config::find_repo_root(&cwd).unwrap_or(cwd);
@@ -215,9 +219,7 @@ fn merge_hook_events(
     marker: &str,
 ) {
     for (event, entries) in fragment_hooks {
-        let existing = hooks
-            .entry(event.clone())
-            .or_insert_with(|| json!([]));
+        let existing = hooks.entry(event.clone()).or_insert_with(|| json!([]));
         let Some(arr) = existing.as_array_mut() else {
             continue;
         };
@@ -263,7 +265,10 @@ pub fn install_claude_code_hooks(user: bool, quiet: bool) -> Result<PathBuf> {
     let settings = claude_code_settings_path(user)?;
     write_settings_hooks(&settings, &claude_code_hooks_fragment(&script))?;
     if !quiet {
-        println!("Installed Claude Code route gate hooks at {}", settings.display());
+        println!(
+            "Installed Claude Code route gate hooks at {}",
+            settings.display()
+        );
     }
     Ok(settings)
 }
@@ -273,7 +278,10 @@ pub fn install_gemini_hooks(user: bool, settings_path: &Path, quiet: bool) -> Re
     let script = deploy_route_gate_script(&hooks_dir)?;
     write_settings_hooks(settings_path, &gemini_hooks_fragment(&script))?;
     if !quiet {
-        println!("Installed Gemini CLI route gate hooks in {}", settings_path.display());
+        println!(
+            "Installed Gemini CLI route gate hooks in {}",
+            settings_path.display()
+        );
     }
     Ok(())
 }
@@ -284,8 +292,13 @@ pub fn install_opencode_hooks(user: bool, quiet: bool) -> Result<()> {
     let plugin_dir = opencode_plugin_dir(user)?;
     let plugin = deploy_opencode_plugin(&plugin_dir)?;
     if !quiet {
-        println!("Installed OpenCode route gate plugin at {}", plugin.display());
-        println!("  OpenCode loads plugins from ~/.config/opencode/plugin/ (or .opencode/plugin/).");
+        println!(
+            "Installed OpenCode route gate plugin at {}",
+            plugin.display()
+        );
+        println!(
+            "  OpenCode loads plugins from ~/.config/opencode/plugin/ (or .opencode/plugin/)."
+        );
     }
     Ok(())
 }
@@ -296,7 +309,10 @@ pub fn install_codex_hooks(user: bool, quiet: bool) -> Result<()> {
     let hooks_path = codex_hooks_path(user)?;
     write_settings_hooks(&hooks_path, &codex_hooks_fragment(&script))?;
     if !quiet {
-        println!("Installed Codex route gate hooks at {}", hooks_path.display());
+        println!(
+            "Installed Codex route gate hooks at {}",
+            hooks_path.display()
+        );
         println!("  Review and trust hooks in Codex with `/hooks` if prompted.");
     }
     Ok(())
@@ -317,7 +333,10 @@ pub fn install_vscode_copilot_instructions(quiet: bool) -> Result<()> {
     fs::write(&path, VSCODE_COPILOT_INSTRUCTIONS)
         .with_context(|| format!("write {}", path.display()))?;
     if !quiet {
-        println!("Installed GitHub Copilot instructions at {}", path.display());
+        println!(
+            "Installed GitHub Copilot instructions at {}",
+            path.display()
+        );
     }
     Ok(())
 }

@@ -1,5 +1,5 @@
 use agent_brain::host_install::{self, HostTarget};
-use agent_brain::install::{merge_mcp_config, mcp_server_entry};
+use agent_brain::install::{mcp_server_entry, merge_mcp_config};
 use std::path::Path;
 use tempfile::TempDir;
 
@@ -22,7 +22,9 @@ fn install_flags_resolve_hosts() {
 #[test]
 fn claude_desktop_path_is_absolute_file() {
     let path = host_install::claude_desktop_config_path().unwrap();
-    assert!(path.to_string_lossy().contains("claude_desktop_config.json"));
+    assert!(path
+        .to_string_lossy()
+        .contains("claude_desktop_config.json"));
 }
 
 #[test]
@@ -38,7 +40,11 @@ fn claude_code_project_uses_mcp_json_at_root() {
     let dir = TempDir::new().unwrap();
     std::env::set_current_dir(dir.path()).unwrap();
     let path = host_install::claude_code_mcp_path(false).unwrap();
-    assert!(path.file_name().unwrap().to_string_lossy().ends_with("mcp.json"));
+    assert!(path
+        .file_name()
+        .unwrap()
+        .to_string_lossy()
+        .ends_with("mcp.json"));
 }
 
 #[test]
@@ -46,7 +52,11 @@ fn opencode_project_uses_opencode_json_at_root() {
     let dir = TempDir::new().unwrap();
     std::env::set_current_dir(dir.path()).unwrap();
     let path = host_install::opencode_config_path(false).unwrap();
-    assert!(path.file_name().unwrap().to_string_lossy().ends_with("opencode.json"));
+    assert!(path
+        .file_name()
+        .unwrap()
+        .to_string_lossy()
+        .ends_with("opencode.json"));
 }
 
 #[test]
@@ -79,39 +89,35 @@ fn install_flags_resolve_opencode() {
     );
 }
 
-    #[test]
-    fn install_flags_resolve_gemini() {
-        assert_eq!(
-            HostTarget::from_args(&["install".into(), "--gemini".into(), "--global".into()]),
-            HostTarget::Gemini { user: true }
-        );
-    }
+#[test]
+fn install_flags_resolve_gemini() {
+    assert_eq!(
+        HostTarget::from_args(&["install".into(), "--gemini".into(), "--global".into()]),
+        HostTarget::Gemini { user: true }
+    );
+}
 
-    #[test]
-    fn install_flags_resolve_antigravity() {
-        assert_eq!(
-            HostTarget::from_args(&["install".into(), "--antigravity".into(), "--global".into()]),
-            HostTarget::Antigravity { user: true }
-        );
-    }
+#[test]
+fn install_flags_resolve_antigravity() {
+    assert_eq!(
+        HostTarget::from_args(&["install".into(), "--antigravity".into(), "--global".into()]),
+        HostTarget::Antigravity { user: true }
+    );
+}
 
-    #[test]
-    fn gemini_project_uses_settings_json_at_root() {
-        let dir = TempDir::new().unwrap();
-        std::env::set_current_dir(dir.path()).unwrap();
-        let path = host_install::gemini_config_path(false).unwrap();
-        assert!(path.ends_with(".gemini/settings.json"));
-    }
+#[test]
+fn gemini_project_uses_settings_json_at_root() {
+    let dir = TempDir::new().unwrap();
+    std::env::set_current_dir(dir.path()).unwrap();
+    let path = host_install::gemini_config_path(false).unwrap();
+    assert!(path.ends_with(".gemini/settings.json"));
+}
 
-    #[test]
-    fn merge_preserves_other_mcp_servers() {
+#[test]
+fn merge_preserves_other_mcp_servers() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("mcp.json");
-    std::fs::write(
-        &path,
-        r#"{"mcpServers":{"other":{"command":"other"}}}"#,
-    )
-    .unwrap();
+    std::fs::write(&path, r#"{"mcpServers":{"other":{"command":"other"}}}"#).unwrap();
     let merged = merge_mcp_config(
         &path,
         mcp_server_entry(Path::new("/usr/local/bin/agent-brain")),

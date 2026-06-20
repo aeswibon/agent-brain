@@ -62,10 +62,7 @@ async fn list_server_tools(server: &UpstreamServerConfig) -> Result<Vec<IndexedU
         .map(|tool| IndexedUpstreamTool {
             server: server.name.clone(),
             name: tool.name.to_string(),
-            description: tool
-                .description
-                .unwrap_or_default()
-                .to_string(),
+            description: tool.description.unwrap_or_default().to_string(),
         })
         .collect())
 }
@@ -106,8 +103,8 @@ async fn connect(
     for (key, value) in env {
         command.env(key, value);
     }
-    let transport = TokioChildProcess::new(command.configure(|_| {}))
-        .context("spawn upstream MCP process")?;
+    let transport =
+        TokioChildProcess::new(command.configure(|_| {})).context("spawn upstream MCP process")?;
     ().serve(transport)
         .await
         .map_err(|e| anyhow::anyhow!("upstream MCP initialize failed: {e}"))

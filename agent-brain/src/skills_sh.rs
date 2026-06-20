@@ -36,24 +36,162 @@ pub struct SkillsShManifest {
 
 pub fn default_discovery_queries() -> Vec<String> {
     vec![
-        "react", "vue", "angular", "svelte", "nextjs", "node", "python", "rust", "go", "java",
-        "kotlin", "swift", "flutter", "dart", "test", "tdd", "vitest", "jest", "playwright",
-        "cypress", "deploy", "docker", "kubernetes", "terraform", "aws", "azure", "gcp",
-        "security", "auth", "api", "graphql", "postgres", "mysql", "redis", "mongo", "supabase",
-        "firebase", "stripe", "seo", "marketing", "design", "ui", "ux", "video", "audio", "pdf",
-        "docx", "excel", "review", "debug", "plan", "mcp", "agent", "skill", "claude", "codex",
-        "lark", "feishu", "github", "gitlab", "linear", "jira", "remotion", "animation", "browser",
-        "scraping", "data", "ml", "ai", "writing", "copy", "email", "sales", "finance", "legal",
-        "medical", "game", "mobile", "web", "css", "html", "tailwind", "shadcn", "prisma",
-        "drizzle", "nestjs", "express", "fastapi", "django", "rails", "laravel", "php", "perl",
-        "bash", "shell", "git", "commit", "refactor", "architecture", "performance",
-        "accessibility", "i18n", "observability", "logging", "typescript", "javascript", "ruby",
-        "elixir", "scala", "csharp", "dotnet", "wordpress", "shopify", "notion", "slack",
-        "vercel", "netlify", "cloudflare", "openai", "anthropic", "gemini", "copilot", "figma",
-        "sketch", "brand", "content", "social", "twitter", "linkedin", "docs", "tutorial",
-        "onboarding", "testing", "lint", "format", "ci", "cd", "monitor", "sre", "devops",
-        "infra", "network", "linux", "macos", "windows", "android", "ios", "react-native",
-        "expo", "electron", "tauri", "wasm", "blockchain", "solidity", "ethereum", "crypto",
+        "react",
+        "vue",
+        "angular",
+        "svelte",
+        "nextjs",
+        "node",
+        "python",
+        "rust",
+        "go",
+        "java",
+        "kotlin",
+        "swift",
+        "flutter",
+        "dart",
+        "test",
+        "tdd",
+        "vitest",
+        "jest",
+        "playwright",
+        "cypress",
+        "deploy",
+        "docker",
+        "kubernetes",
+        "terraform",
+        "aws",
+        "azure",
+        "gcp",
+        "security",
+        "auth",
+        "api",
+        "graphql",
+        "postgres",
+        "mysql",
+        "redis",
+        "mongo",
+        "supabase",
+        "firebase",
+        "stripe",
+        "seo",
+        "marketing",
+        "design",
+        "ui",
+        "ux",
+        "video",
+        "audio",
+        "pdf",
+        "docx",
+        "excel",
+        "review",
+        "debug",
+        "plan",
+        "mcp",
+        "agent",
+        "skill",
+        "claude",
+        "codex",
+        "lark",
+        "feishu",
+        "github",
+        "gitlab",
+        "linear",
+        "jira",
+        "remotion",
+        "animation",
+        "browser",
+        "scraping",
+        "data",
+        "ml",
+        "ai",
+        "writing",
+        "copy",
+        "email",
+        "sales",
+        "finance",
+        "legal",
+        "medical",
+        "game",
+        "mobile",
+        "web",
+        "css",
+        "html",
+        "tailwind",
+        "shadcn",
+        "prisma",
+        "drizzle",
+        "nestjs",
+        "express",
+        "fastapi",
+        "django",
+        "rails",
+        "laravel",
+        "php",
+        "perl",
+        "bash",
+        "shell",
+        "git",
+        "commit",
+        "refactor",
+        "architecture",
+        "performance",
+        "accessibility",
+        "i18n",
+        "observability",
+        "logging",
+        "typescript",
+        "javascript",
+        "ruby",
+        "elixir",
+        "scala",
+        "csharp",
+        "dotnet",
+        "wordpress",
+        "shopify",
+        "notion",
+        "slack",
+        "vercel",
+        "netlify",
+        "cloudflare",
+        "openai",
+        "anthropic",
+        "gemini",
+        "copilot",
+        "figma",
+        "sketch",
+        "brand",
+        "content",
+        "social",
+        "twitter",
+        "linkedin",
+        "docs",
+        "tutorial",
+        "onboarding",
+        "testing",
+        "lint",
+        "format",
+        "ci",
+        "cd",
+        "monitor",
+        "sre",
+        "devops",
+        "infra",
+        "network",
+        "linux",
+        "macos",
+        "windows",
+        "android",
+        "ios",
+        "react-native",
+        "expo",
+        "electron",
+        "tauri",
+        "wasm",
+        "blockchain",
+        "solidity",
+        "ethereum",
+        "crypto",
     ]
     .into_iter()
     .map(String::from)
@@ -63,7 +201,8 @@ pub fn default_discovery_queries() -> Vec<String> {
 impl Default for SkillsShManifest {
     fn default() -> Self {
         Self {
-            catalog_note: "skills.sh public catalog (730k+); sync --target 2000 for real fixture".into(),
+            catalog_note: "skills.sh public catalog (730k+); sync --target 2000 for real fixture"
+                .into(),
             required_ids: vec![
                 "vercel-labs/skills/find-skills".into(),
                 "vercel-labs/agent-skills/vercel-react-best-practices".into(),
@@ -188,13 +327,15 @@ pub fn default_skills_sh_report_path() -> PathBuf {
 
 pub fn load_manifest(path: &Path) -> Result<SkillsShManifest> {
     let mut manifest = if path.exists() {
-        let raw = std::fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
+        let raw =
+            std::fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
         serde_json::from_str(&raw).context("parse skills-sh manifest")?
     } else {
         SkillsShManifest::default()
     };
     if manifest.discovery_queries.len() < 50 {
-        let mut seen = std::collections::BTreeSet::from_iter(manifest.discovery_queries.iter().cloned());
+        let mut seen =
+            std::collections::BTreeSet::from_iter(manifest.discovery_queries.iter().cloned());
         for q in default_discovery_queries() {
             if seen.insert(q.clone()) {
                 manifest.discovery_queries.push(q);
@@ -219,7 +360,8 @@ pub fn write_snapshot(path: &Path, snapshot: &SkillsShSnapshot) -> Result<()> {
         std::fs::create_dir_all(parent)?;
     }
     let json = serde_json::to_string_pretty(snapshot)?;
-    std::fs::write(path, format!("{json}\n")).with_context(|| format!("write {}", path.display()))?;
+    std::fs::write(path, format!("{json}\n"))
+        .with_context(|| format!("write {}", path.display()))?;
     Ok(())
 }
 
@@ -235,7 +377,11 @@ pub struct SyncOptions {
 }
 
 impl SyncOptions {
-    pub fn from_manifest(manifest: &SkillsShManifest, max_skills: Option<usize>, delay_ms: u64) -> Self {
+    pub fn from_manifest(
+        manifest: &SkillsShManifest,
+        max_skills: Option<usize>,
+        delay_ms: u64,
+    ) -> Self {
         Self {
             target: max_skills.unwrap_or(manifest.max_skills),
             delay_ms,
@@ -300,7 +446,10 @@ pub fn retry_failed_downloads(
         }
         if attempted % 50 == 0 {
             write_snapshot(snapshot_path, &snapshot)?;
-            eprintln!("retry checkpoint: {} upgraded / {} attempted", upgraded, attempted);
+            eprintln!(
+                "retry checkpoint: {} upgraded / {} attempted",
+                upgraded, attempted
+            );
         }
         std::thread::sleep(Duration::from_millis(delay_ms));
     }
@@ -321,8 +470,11 @@ pub fn sync_snapshot(
     max_skills: Option<usize>,
     delay_ms: u64,
 ) -> Result<SkillsShSnapshot> {
-    sync_snapshot_with_options(manifest, SyncOptions::from_manifest(manifest, max_skills, delay_ms))
-        .map(|(snapshot, _)| snapshot)
+    sync_snapshot_with_options(
+        manifest,
+        SyncOptions::from_manifest(manifest, max_skills, delay_ms),
+    )
+    .map(|(snapshot, _)| snapshot)
 }
 
 pub fn sync_snapshot_with_options(
@@ -339,12 +491,11 @@ pub fn sync_snapshot_with_options(
     } else {
         Vec::new()
     };
-    let mut by_id: std::collections::BTreeMap<String, SkillsShSkillRecord> = existing
-        .drain(..)
-        .map(|s| (s.id.clone(), s))
-        .collect();
+    let mut by_id: std::collections::BTreeMap<String, SkillsShSkillRecord> =
+        existing.drain(..).map(|s| (s.id.clone(), s)).collect();
 
-    let mut meta_by_id: std::collections::BTreeMap<String, SearchSkill> = std::collections::BTreeMap::new();
+    let mut meta_by_id: std::collections::BTreeMap<String, SearchSkill> =
+        std::collections::BTreeMap::new();
     for id in &manifest.required_ids {
         meta_by_id.insert(
             id.clone(),
@@ -352,7 +503,10 @@ pub fn sync_snapshot_with_options(
                 id: id.clone(),
                 skill_id: None,
                 name: id.rsplit('/').next().unwrap_or(id).to_string(),
-                source: id.rsplit_once('/').map(|(s, _)| s.to_string()).unwrap_or_default(),
+                source: id
+                    .rsplit_once('/')
+                    .map(|(s, _)| s.to_string())
+                    .unwrap_or_default(),
                 installs: Some(u64::MAX),
             },
         );
@@ -368,7 +522,9 @@ pub fn sync_snapshot_with_options(
                     meta_by_id.entry(skill.id.clone()).or_insert(skill);
                 }
             }
-            Err(err) => tracing::warn!(query = query.as_str(), error = %err, "skills.sh search failed"),
+            Err(err) => {
+                tracing::warn!(query = query.as_str(), error = %err, "skills.sh search failed")
+            }
         }
         std::thread::sleep(Duration::from_millis(options.delay_ms));
     }
@@ -451,7 +607,10 @@ pub fn sync_snapshot_with_options(
     Ok((snapshot, report))
 }
 
-fn snapshot_from_map(by_id: &std::collections::BTreeMap<String, SkillsShSkillRecord>, cap: usize) -> SkillsShSnapshot {
+fn snapshot_from_map(
+    by_id: &std::collections::BTreeMap<String, SkillsShSkillRecord>,
+    cap: usize,
+) -> SkillsShSnapshot {
     let mut skills: Vec<SkillsShSkillRecord> = by_id.values().cloned().collect();
     skills.sort_by(|a, b| a.id.cmp(&b.id));
     skills.truncate(cap);
@@ -508,7 +667,10 @@ fn download_http_agent() -> &'static ureq::Agent {
     })
 }
 
-fn http_get_json_attempts<T: serde::de::DeserializeOwned>(url: &str, max_attempts: u32) -> Result<T> {
+fn http_get_json_attempts<T: serde::de::DeserializeOwned>(
+    url: &str,
+    max_attempts: u32,
+) -> Result<T> {
     let agent = ureq::agent();
     http_get_json_with_agent(&agent, url, max_attempts)
 }
@@ -565,7 +727,8 @@ fn search_skills(query: &str, limit: usize) -> Result<Vec<SearchSkill>> {
 fn download_skill(id: &str, max_attempts: u32) -> Result<SkillsShSkillRecord> {
     let (source, slug) = parse_skill_id(id)?;
     let url = format!("{SKILLS_SH_DOWNLOAD_BASE}/{source}/{slug}");
-    let body: DownloadResponse = http_get_json_with_agent(download_http_agent(), &url, max_attempts)?;
+    let body: DownloadResponse =
+        http_get_json_with_agent(download_http_agent(), &url, max_attempts)?;
     let skill_md = body
         .files
         .iter()
@@ -789,7 +952,8 @@ pub fn run_skills_sh_eval(
 
     let snapshot = load_snapshot(snapshot_path)?;
     let (engine, _dir) = new_isolated_engine()?;
-    let total = seed_simulated_production_index(&engine.store, &snapshot, SKILLS_SH_SIMULATED_INDEX)?;
+    let total =
+        seed_simulated_production_index(&engine.store, &snapshot, SKILLS_SH_SIMULATED_INDEX)?;
     run_skills_sh_eval_on_engine(
         &engine,
         &golden,
@@ -805,7 +969,8 @@ pub fn write_golden(path: &Path, golden: &SkillsShGoldenFile) -> Result<()> {
         std::fs::create_dir_all(parent)?;
     }
     let json = serde_json::to_string_pretty(golden)?;
-    std::fs::write(path, format!("{json}\n")).with_context(|| format!("write {}", path.display()))?;
+    std::fs::write(path, format!("{json}\n"))
+        .with_context(|| format!("write {}", path.display()))?;
     Ok(())
 }
 
@@ -817,7 +982,10 @@ fn query_templates_for_skill(skill: &SkillsShSkillRecord) -> Vec<String> {
         format!("how to use {topic_words} in my project"),
     ];
     if !skill.name.is_empty() && skill.name != skill.topic {
-        out.push(format!("{} workflow guidance", skill.name.replace('-', " ")));
+        out.push(format!(
+            "{} workflow guidance",
+            skill.name.replace('-', " ")
+        ));
     }
     let line = skill
         .text
@@ -833,7 +1001,11 @@ fn query_templates_for_skill(skill: &SkillsShSkillRecord) -> Vec<String> {
 }
 
 fn skill_probe_priority(skill: &SkillsShSkillRecord) -> u64 {
-    let download_boost = if skill.indexed_from == "download" { 1_000_000 } else { 0 };
+    let download_boost = if skill.indexed_from == "download" {
+        1_000_000
+    } else {
+        0
+    };
     let text_len = skill.text.len().min(50_000) as u64;
     download_boost + text_len + skill.installs.unwrap_or(0)
 }
@@ -872,15 +1044,8 @@ pub fn probe_golden_cases(
             continue;
         }
         for query in query_templates_for_skill(skill) {
-            let resp = engine.route_task(
-                &query,
-                None,
-                &[],
-                500,
-                limits,
-                Some("implementing"),
-                None,
-            )?;
+            let resp =
+                engine.route_task(&query, None, &[], 500, limits, Some("implementing"), None)?;
             let hit = resp
                 .recommended_skills
                 .iter()

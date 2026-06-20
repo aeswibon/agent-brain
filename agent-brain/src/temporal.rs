@@ -32,23 +32,32 @@ pub fn prune_expired(conn: &Connection, now_ms: i64) -> Result<PruneReport> {
            AND invalid_at <= ?1
            AND id NOT IN (SELECT original_id FROM facts_archive)"
     ))?;
-    let rows: Vec<(String, String, String, String, Option<String>, String, f64, String, Option<String>)> =
-        stmt
-            .query_map(params![now_ms], |row| {
-                Ok((
-                    row.get(0)?,
-                    row.get(1)?,
-                    row.get(2)?,
-                    row.get(3)?,
-                    row.get(4)?,
-                    row.get(5)?,
-                    row.get(6)?,
-                    row.get(7)?,
-                    row.get(8)?,
-                ))
-            })?
-            .filter_map(|r| r.ok())
-            .collect();
+    let rows: Vec<(
+        String,
+        String,
+        String,
+        String,
+        Option<String>,
+        String,
+        f64,
+        String,
+        Option<String>,
+    )> = stmt
+        .query_map(params![now_ms], |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+                row.get(5)?,
+                row.get(6)?,
+                row.get(7)?,
+                row.get(8)?,
+            ))
+        })?
+        .filter_map(|r| r.ok())
+        .collect();
 
     let mut archived_facts = 0usize;
     for (id, topic, fact, scope, scope_key, source, confidence, polarity, apply_when) in rows {
@@ -114,7 +123,11 @@ pub fn link_fact_evolution(
 }
 
 /// Facts reachable within `max_hops` from a seed fact (recursive CTE on memory_kg_edges).
-pub fn related_fact_ids(conn: &Connection, seed_fact_id: &str, max_hops: u32) -> Result<Vec<String>> {
+pub fn related_fact_ids(
+    conn: &Connection,
+    seed_fact_id: &str,
+    max_hops: u32,
+) -> Result<Vec<String>> {
     let mut stmt = conn.prepare(
         r#"WITH RECURSIVE walk(fact_id, depth) AS (
                SELECT ?1, 0
@@ -168,7 +181,9 @@ mod tests {
         let report = prune_expired(&conn, now).unwrap();
         assert_eq!(report.archived_facts, 1);
         let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM facts WHERE id = 'old'", [], |r| r.get(0))
+            .query_row("SELECT COUNT(*) FROM facts WHERE id = 'old'", [], |r| {
+                r.get(0)
+            })
             .unwrap();
         assert_eq!(count, 0);
     }

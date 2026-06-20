@@ -28,10 +28,7 @@ pub fn route_code_context(
     if store.count_code_graph_nodes(repo_root).ok()? == 0 {
         return None;
     }
-    let gods = store
-        .list_god_nodes(repo_root, 5)
-        .ok()
-        .unwrap_or_default();
+    let gods = store.list_god_nodes(repo_root, 5).ok().unwrap_or_default();
     let relevant = store
         .search_code_graph_labels(repo_root, user_message, 5)
         .ok()

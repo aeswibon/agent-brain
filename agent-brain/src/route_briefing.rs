@@ -23,7 +23,9 @@ pub fn token_savings(resp: &RouteTaskResponse) -> Option<TokenSavings> {
     if resp.index_total == 0 {
         return None;
     }
-    let naive_tokens = resp.index_total.saturating_mul(NAIVE_TOKENS_PER_INDEXED_ITEM);
+    let naive_tokens = resp
+        .index_total
+        .saturating_mul(NAIVE_TOKENS_PER_INDEXED_ITEM);
     let saved_tokens = naive_tokens.saturating_sub(resp.tokens_used);
     let saved_pct = if naive_tokens > 0 {
         saved_tokens.saturating_mul(100) / naive_tokens
@@ -96,29 +98,27 @@ pub fn format_briefing(resp: &RouteTaskResponse) -> String {
     section_list(
         &mut out,
         "Agents",
-        resp.recommended_agents.iter().map(|a| {
-            format!(
-                "**{}** — {} _(score {:.2})_",
-                a.name, a.rationale, a.score
-            )
-        }),
+        resp.recommended_agents
+            .iter()
+            .map(|a| format!("**{}** — {} _(score {:.2})_", a.name, a.rationale, a.score)),
     );
     section_list(
         &mut out,
         "Skills",
-        resp.recommended_skills.iter().map(|s| {
-            format!(
-                "**{}** — {} _(score {:.2})_",
-                s.name, s.rationale, s.score
-            )
-        }),
+        resp.recommended_skills
+            .iter()
+            .map(|s| format!("**{}** — {} _(score {:.2})_", s.name, s.rationale, s.score)),
     );
     section_list(
         &mut out,
         "Rules",
         resp.applicable_rules.iter().map(|r| {
             let preview: String = r.text.chars().take(80).collect();
-            let ellipsis = if r.text.chars().count() > 80 { "…" } else { "" };
+            let ellipsis = if r.text.chars().count() > 80 {
+                "…"
+            } else {
+                ""
+            };
             format!(
                 "**{}** — {}{} _(score {:.2})_",
                 r.topic, preview, ellipsis, r.score
@@ -128,9 +128,9 @@ pub fn format_briefing(resp: &RouteTaskResponse) -> String {
     section_list(
         &mut out,
         "Memory",
-        resp.relevant_memory.iter().map(|m| {
-            format!("**{}** — {} _(score {:.2})_", m.topic, m.text, m.score)
-        }),
+        resp.relevant_memory
+            .iter()
+            .map(|m| format!("**{}** — {} _(score {:.2})_", m.topic, m.text, m.score)),
     );
     section_list(
         &mut out,
@@ -288,9 +288,8 @@ pub fn clear_anti_pattern_suggestion(home: &Path) -> Result<()> {
     if let Some(obj) = state.as_object_mut() {
         obj.remove("anti_pattern_suggestion");
     }
-    fs::write(&path, serde_json::to_string(&state)?).with_context(|| {
-        format!("write {}", path.display())
-    })?;
+    fs::write(&path, serde_json::to_string(&state)?)
+        .with_context(|| format!("write {}", path.display()))?;
     Ok(())
 }
 

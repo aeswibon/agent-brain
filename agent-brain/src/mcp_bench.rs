@@ -4,11 +4,11 @@ use std::time::Instant;
 
 use anyhow::{bail, Result};
 
-use crate::bench::{percentiles, run_ci_bench, PercentileMs, LatencyBenchReport};
-use crate::types::ItemType;
+use crate::bench::{percentiles, run_ci_bench, LatencyBenchReport, PercentileMs};
 use crate::fixture::new_isolated_engine;
 use crate::graphify_bench::{run_ci_graphify_bench, GraphifyBenchReport};
 use crate::token_tools::{file_summary, grep_search, read_file_head, DEFAULT_MAX_BYTES};
+use crate::types::ItemType;
 
 const SAMPLES: usize = 25;
 
@@ -74,11 +74,7 @@ pub fn assert_mcp_bench_gate(report: &McpBenchReport) -> Result<()> {
 
 fn bench_get_context() -> Result<PercentileMs> {
     let (engine, _dir) = new_isolated_engine()?;
-    let types = [
-        ItemType::Skill,
-        ItemType::Rule,
-        ItemType::Memory,
-    ];
+    let types = [ItemType::Skill, ItemType::Rule, ItemType::Memory];
     let query = "configure rust backend testing patterns";
     for i in 0..3 {
         let q = format!("{query} warmup {i}");

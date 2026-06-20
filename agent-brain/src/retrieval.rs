@@ -7,21 +7,23 @@ use std::collections::HashSet;
 
 const STOPWORDS: &[&str] = &[
     "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by",
-    "from", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "do",
-    "does", "did", "will", "would", "could", "should", "may", "might", "must", "shall",
-    "can", "need", "let", "lets", "this", "that", "these", "those", "it", "its", "we", "you",
-    "i", "me", "my", "our", "your", "they", "them", "their", "as", "if", "so", "than", "then",
-    "there", "here", "when", "what", "which", "who", "how", "why", "all", "each", "every",
-    "both", "few", "more", "most", "other", "some", "such", "no", "not", "only", "own",
-    "same", "too", "very", "just", "about", "into", "through", "during", "before", "after",
-    "above", "below", "up", "down", "out", "off", "over", "under", "again", "further",
+    "from", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "do", "does",
+    "did", "will", "would", "could", "should", "may", "might", "must", "shall", "can", "need",
+    "let", "lets", "this", "that", "these", "those", "it", "its", "we", "you", "i", "me", "my",
+    "our", "your", "they", "them", "their", "as", "if", "so", "than", "then", "there", "here",
+    "when", "what", "which", "who", "how", "why", "all", "each", "every", "both", "few", "more",
+    "most", "other", "some", "such", "no", "not", "only", "own", "same", "too", "very", "just",
+    "about", "into", "through", "during", "before", "after", "above", "below", "up", "down", "out",
+    "off", "over", "under", "again", "further",
 ];
 
 /// Related terms that often appear in different wording for the same intent.
 const SYNONYM_GROUPS: &[&[&str]] = &[
     &["pr", "pull", "request", "merge", "mergeable"],
     &["review", "audit", "diff", "checklist"],
-    &["test", "testing", "tests", "vitest", "jest", "pytest", "mockmvc"],
+    &[
+        "test", "testing", "tests", "vitest", "jest", "pytest", "mockmvc",
+    ],
     &["deploy", "release", "ship", "publish"],
     &["debug", "fix", "bug", "error", "issue", "crash"],
     &["plan", "design", "architect", "roadmap", "spec"],
@@ -31,14 +33,39 @@ const SYNONYM_GROUPS: &[&[&str]] = &[
     &["postgres", "postgresql", "pg", "pooling", "pgbouncer"],
     &["rust", "cargo", "clippy", "anyhow", "thiserror"],
     &[
-        "grep", "rg", "cat", "head", "tail", "token", "tokens", "efficient", "read", "file",
-        "large", "log", "dist", "artifact",
+        "grep",
+        "rg",
+        "cat",
+        "head",
+        "tail",
+        "token",
+        "tokens",
+        "efficient",
+        "read",
+        "file",
+        "large",
+        "log",
+        "dist",
+        "artifact",
     ],
 ];
 
 const SUPERVISOR_TERMS: &[&str] = &[
-    "grep", "rg", "cat", "head", "tail", "token", "tokens", "efficient", "read", "file", "large",
-    "log", "dist", "artifact", "build",
+    "grep",
+    "rg",
+    "cat",
+    "head",
+    "tail",
+    "token",
+    "tokens",
+    "efficient",
+    "read",
+    "file",
+    "large",
+    "log",
+    "dist",
+    "artifact",
+    "build",
 ];
 
 /// Fraction of supervisor intent terms present in the query (0.0–1.0).
@@ -163,15 +190,8 @@ pub fn entity_overlap_score(query: &str, topic: &str, text: &str) -> f64 {
     if entities.is_empty() {
         return 0.0;
     }
-    let hay = format!(
-        "{} {}",
-        topic.to_lowercase(),
-        text.to_lowercase()
-    );
-    let matched = entities
-        .iter()
-        .filter(|e| hay.contains(e.as_str()))
-        .count();
+    let hay = format!("{} {}", topic.to_lowercase(), text.to_lowercase());
+    let matched = entities.iter().filter(|e| hay.contains(e.as_str())).count();
     matched as f64 / entities.len() as f64
 }
 
@@ -189,7 +209,8 @@ mod tests {
 
     #[test]
     fn entity_overlap_matches_camel_case() {
-        let score = entity_overlap_score("fix Vitest config", "testing", "Use Vitest for unit tests");
+        let score =
+            entity_overlap_score("fix Vitest config", "testing", "Use Vitest for unit tests");
         assert!(score > 0.0);
     }
 

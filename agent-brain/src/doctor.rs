@@ -175,7 +175,11 @@ pub fn run(fix: bool) -> Result<()> {
 
     let serve = crate::serve_meta::assess(&config.home, mcp_binary.as_deref());
     if let Some(meta) = &serve.meta {
-        let alive = if serve.process_alive { "running" } else { "not running" };
+        let alive = if serve.process_alive {
+            "running"
+        } else {
+            "not running"
+        };
         println!(
             "  last serve:            v{} pid {} ({})",
             meta.version, meta.pid, alive
@@ -205,13 +209,17 @@ pub fn run(fix: bool) -> Result<()> {
     println!("Tips:");
     println!("  • agent-brain briefing — readable route + estimated token savings vs full index");
     println!("  • agent-brain stats — index size, savings, latency, adoption milestones");
-    println!("  • agent-brain dashboard --open — local HTML value dashboard (screenshot-friendly ROI)");
+    println!(
+        "  • agent-brain dashboard --open — local HTML value dashboard (screenshot-friendly ROI)"
+    );
     println!("  • agent-brain onboarding — 5-minute getting started checklist");
     println!("  • agent-brain install --all --global — MCP + instructions for Cursor, OpenCode, Claude Code, VS Code, Codex, Gemini, Antigravity");
     println!("  • Claude Code, Codex, Gemini, Antigravity, OpenCode: route gate hooks installed via install --<host> [--global]");
     println!("  • Cursor has the strongest host-tool gate (hooks on Read/Shell); other hosts gate agent-brain MCP tools until route_task");
     println!("  • Background auto-update during serve can exec a new binary after idle (see config auto_update.mcp.restart_after_update)");
-    println!("  • macOS: linker-signed binaries are killed by taskgated — doctor --fix adhoc re-signs");
+    println!(
+        "  • macOS: linker-signed binaries are killed by taskgated — doctor --fix adhoc re-signs"
+    );
     println!("  • macOS: browser/curl downloads add quarantine xattrs — xattr -cr + adhoc codesign before Cursor MCP");
     println!("  • spctl may reject adhoc local builds; that is OK if codesign shows adhoc, not linker-signed");
 
@@ -256,18 +264,27 @@ fn print_other_hosts(home: &Path) {
     let gemini = home.join(".gemini/settings.json");
     let antigravity = home.join(".gemini/antigravity/mcp_config.json");
     let antigravity_shared = home.join(".gemini/config/mcp_config.json");
-    println!("  opencode (global):     {}", host_mcp_status(&opencode, "mcp", "agent-brain"));
+    println!(
+        "  opencode (global):     {}",
+        host_mcp_status(&opencode, "mcp", "agent-brain")
+    );
     println!("  codex (global):        {}", codex_mcp_status(&codex));
     println!(
         "  codex hooks:           {}",
         crate::host_hooks::hooks_status(&codex_hooks, "route_gate.py")
     );
-    println!("  claude-code (global):  {}", host_mcp_status(&claude, "mcpServers", "agent-brain"));
+    println!(
+        "  claude-code (global):  {}",
+        host_mcp_status(&claude, "mcpServers", "agent-brain")
+    );
     println!(
         "  claude hooks:          {}",
         crate::host_hooks::hooks_status(&claude_settings, "route_gate.py")
     );
-    println!("  gemini (global):       {}", host_mcp_status(&gemini, "mcpServers", "agent-brain"));
+    println!(
+        "  gemini (global):       {}",
+        host_mcp_status(&gemini, "mcpServers", "agent-brain")
+    );
     println!(
         "  gemini hooks:          {}",
         crate::host_hooks::hooks_status(&gemini, "route_gate.py")
@@ -342,9 +359,9 @@ fn unique_existing_paths(entries: Vec<PathBuf>) -> Vec<PathBuf> {
         if !candidate.is_file() {
             continue;
         }
-        let dup = out.iter().any(|existing| {
-            paths_same(existing.as_path(), candidate.as_path())
-        });
+        let dup = out
+            .iter()
+            .any(|existing| paths_same(existing.as_path(), candidate.as_path()));
         if !dup {
             out.push(candidate);
         }
@@ -387,13 +404,7 @@ pub fn gatekeeper_allows(path: &Path) -> bool {
     #[cfg(target_os = "macos")]
     {
         Command::new("spctl")
-            .args([
-                "-a",
-                "-vv",
-                "-t",
-                "execute",
-                &path.display().to_string(),
-            ])
+            .args(["-a", "-vv", "-t", "execute", &path.display().to_string()])
             .output()
             .map(|o| o.status.success())
             .unwrap_or(false)
@@ -434,12 +445,7 @@ pub fn adhoc_sign(path: &Path) -> Result<()> {
             .status()
             .context("xattr -cr")?;
         let status = Command::new("codesign")
-            .args([
-                "--force",
-                "--sign",
-                "-",
-                &path.display().to_string(),
-            ])
+            .args(["--force", "--sign", "-", &path.display().to_string()])
             .status()
             .context("codesign")?;
         if !status.success() {

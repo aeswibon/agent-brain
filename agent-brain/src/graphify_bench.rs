@@ -8,7 +8,9 @@ use anyhow::{bail, Result};
 use serde_json::json;
 
 use crate::bench::{percentiles, PercentileMs};
-use crate::fixture::{default_route_limits, new_isolated_engine, seed_bench_fixture, BENCH_FIXTURE_SKILLS};
+use crate::fixture::{
+    default_route_limits, new_isolated_engine, seed_bench_fixture, BENCH_FIXTURE_SKILLS,
+};
 use crate::graphify::ingest_graph_at_path;
 
 pub const GRAPHIFY_INGEST_1K_THRESHOLD_MS: u64 = 2_000;
@@ -69,14 +71,30 @@ pub fn run_graphify_tier(node_count: usize) -> Result<GraphifyBenchTier> {
     let query_base = "navigate authentication module database calls";
     for i in 0..ROUTE_WARMUP {
         let q = format!("{query_base} warmup {i}");
-        engine.route_task(&q, Some(&repo), &[], 500, limits, Some("implementing"), None)?;
+        engine.route_task(
+            &q,
+            Some(&repo),
+            &[],
+            500,
+            limits,
+            Some("implementing"),
+            None,
+        )?;
     }
 
     let mut samples = Vec::with_capacity(ROUTE_SAMPLES);
     let mut hits = 0usize;
     for i in 0..ROUTE_SAMPLES {
         let q = format!("{query_base} trace flow {i}");
-        let resp = engine.route_task(&q, Some(&repo), &[], 500, limits, Some("implementing"), None)?;
+        let resp = engine.route_task(
+            &q,
+            Some(&repo),
+            &[],
+            500,
+            limits,
+            Some("implementing"),
+            None,
+        )?;
         if resp.code_context.is_some() {
             hits += 1;
         }
@@ -141,7 +159,9 @@ pub fn write_synthetic_graph(repo_root: &Path, node_count: usize) -> Result<usiz
         out.join("graph.json"),
         serde_json::to_string(&json!({ "nodes": nodes, "links": links }))?,
     )?;
-    let gods: Vec<String> = (0..5.min(node_count)).map(|i| format!("Module{i}")).collect();
+    let gods: Vec<String> = (0..5.min(node_count))
+        .map(|i| format!("Module{i}"))
+        .collect();
     fs::write(
         out.join(".graphify_analysis.json"),
         serde_json::to_string(&json!({ "gods": gods }))?,

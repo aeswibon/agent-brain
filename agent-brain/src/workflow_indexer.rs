@@ -24,7 +24,11 @@ pub fn discover_workflows(workflow_dirs: &[PathBuf]) -> Vec<(PathBuf, WorkflowDe
         if !dir.exists() {
             continue;
         }
-        for entry in WalkDir::new(dir).max_depth(2).into_iter().filter_map(|e| e.ok()) {
+        for entry in WalkDir::new(dir)
+            .max_depth(2)
+            .into_iter()
+            .filter_map(|e| e.ok())
+        {
             if entry.file_type().is_file() {
                 let path = entry.path();
                 if path.extension().map(|e| e == "yaml").unwrap_or(false) {

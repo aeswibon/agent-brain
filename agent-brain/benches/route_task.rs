@@ -23,8 +23,8 @@ fn route_task_cache_hit(c: &mut Criterion) {
                     500,
                     limits,
                     Some("implementing"),
-            None,
-        )
+                    None,
+                )
                 .expect("route")
         });
     });
@@ -40,7 +40,15 @@ fn route_task_warm_unique(c: &mut Criterion) {
             let q = format!("implement rust module {i} with error handling patterns");
             i = i.wrapping_add(1);
             engine
-                .route_task(black_box(&q), None, &[], 500, limits, Some("implementing"), None)
+                .route_task(
+                    black_box(&q),
+                    None,
+                    &[],
+                    500,
+                    limits,
+                    Some("implementing"),
+                    None,
+                )
                 .expect("route")
         });
     });

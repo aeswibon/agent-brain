@@ -34,7 +34,9 @@ pub fn run(target: HostTarget, print_only: bool, reload: bool) -> Result<()> {
             _ => {
                 println!(
                     "{}",
-                    serde_json::to_string_pretty(&json!({ "mcpServers": { "agent-brain": snippet } }))?
+                    serde_json::to_string_pretty(
+                        &json!({ "mcpServers": { "agent-brain": snippet } })
+                    )?
                 );
             }
         }
@@ -117,9 +119,8 @@ pub fn configure_cursor(global: bool, exe: &Path, quiet: bool) -> Result<()> {
 
     let merged = merge_mcp_config(&config_path, mcp_server_entry(exe))?;
     let pretty = serde_json::to_string_pretty(&merged)?;
-    fs::write(&config_path, format!("{pretty}\n")).with_context(|| {
-        format!("write MCP config to {}", config_path.display())
-    })?;
+    fs::write(&config_path, format!("{pretty}\n"))
+        .with_context(|| format!("write MCP config to {}", config_path.display()))?;
 
     if global {
         install_cursor_hooks(quiet)?;
@@ -165,7 +166,8 @@ fn install_cursor_hooks(quiet: bool) -> Result<()> {
     fs::create_dir_all(&hooks_dir).with_context(|| format!("create {}", hooks_dir.display()))?;
 
     let script_path = hooks_dir.join("route_gate.py");
-    fs::write(&script_path, ROUTE_GATE_HOOK).with_context(|| format!("write {}", script_path.display()))?;
+    fs::write(&script_path, ROUTE_GATE_HOOK)
+        .with_context(|| format!("write {}", script_path.display()))?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -177,9 +179,8 @@ fn install_cursor_hooks(quiet: bool) -> Result<()> {
     let hooks_config = cursor_dir.join("hooks.json");
     let merged = merge_hooks_config(&hooks_config, AGENT_BRAIN_HOOKS_JSON)?;
     let pretty = serde_json::to_string_pretty(&merged)?;
-    fs::write(&hooks_config, format!("{pretty}\n")).with_context(|| {
-        format!("write hooks config to {}", hooks_config.display())
-    })?;
+    fs::write(&hooks_config, format!("{pretty}\n"))
+        .with_context(|| format!("write hooks config to {}", hooks_config.display()))?;
 
     if !command_exists("python3") {
         eprintln!("Warning: python3 not found on PATH — route_gate hook requires python3");
@@ -201,9 +202,8 @@ fn install_cursor_permissions(quiet: bool) -> Result<()> {
     let path = cursor_dir.join("permissions.json");
     let merged = merge_permissions_config(&path)?;
     let pretty = serde_json::to_string_pretty(&merged)?;
-    fs::write(&path, format!("{pretty}\n")).with_context(|| {
-        format!("write permissions config to {}", path.display())
-    })?;
+    fs::write(&path, format!("{pretty}\n"))
+        .with_context(|| format!("write permissions config to {}", path.display()))?;
 
     if !quiet {
         println!("Installed Cursor MCP allowlist at {}", path.display());
@@ -259,7 +259,8 @@ fn command_exists(cmd: &str) -> bool {
 }
 
 fn merge_hooks_config(path: &Path, agent_brain_fragment: &str) -> Result<Value> {
-    let fragment: Value = serde_json::from_str(agent_brain_fragment).context("parse agent-brain hooks")?;
+    let fragment: Value =
+        serde_json::from_str(agent_brain_fragment).context("parse agent-brain hooks")?;
     let fragment_hooks = fragment
         .get("hooks")
         .and_then(|v| v.as_object())
@@ -283,9 +284,7 @@ fn merge_hooks_config(path: &Path, agent_brain_fragment: &str) -> Result<Value> 
         .context("hooks.json must contain a hooks object")?;
 
     for (event, entries) in fragment_hooks {
-        let existing = hooks
-            .entry(event.clone())
-            .or_insert_with(|| json!([]));
+        let existing = hooks.entry(event.clone()).or_insert_with(|| json!([]));
         let Some(arr) = existing.as_array_mut() else {
             continue;
         };
@@ -469,7 +468,11 @@ mod tests {
 }"#,
         )
         .unwrap();
-        let merged = merge_mcp_config(&path, mcp_server_entry(Path::new("/usr/local/bin/agent-brain"))).unwrap();
+        let merged = merge_mcp_config(
+            &path,
+            mcp_server_entry(Path::new("/usr/local/bin/agent-brain")),
+        )
+        .unwrap();
         let text = serde_json::to_string_pretty(&merged).unwrap();
         assert!(text.contains("agent-brain"));
         assert!(text.contains("other-mcp"));

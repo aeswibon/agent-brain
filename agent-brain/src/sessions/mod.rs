@@ -1,7 +1,7 @@
 //! Session transcript import: structured digests (default) and optional legacy snippet ingest.
 
-mod discover;
 mod digest;
+mod discover;
 mod opencode;
 mod parse;
 mod types;
@@ -42,12 +42,9 @@ pub struct SessionDiscoverReport {
 }
 
 /// Default session import: structured digests. Legacy snippet ingest when enabled in config.
-pub fn ingest_sessions(
-    store: &BrainStore,
-    embedder: &Embedder,
-    config: &Config,
-) -> Result<usize> {
-    let report = ingest_sessions_filtered(store, embedder, config, &[], config.session_ingest_legacy)?;
+pub fn ingest_sessions(store: &BrainStore, embedder: &Embedder, config: &Config) -> Result<usize> {
+    let report =
+        ingest_sessions_filtered(store, embedder, config, &[], config.session_ingest_legacy)?;
     Ok(report.digests_stored + report.legacy_stored)
 }
 
@@ -71,8 +68,7 @@ pub fn ingest_sessions_filtered(
         };
     }
     if legacy && config.session_ingest_legacy {
-        report.legacy_stored =
-            ingest_legacy_sessions_filtered(store, embedder, config, sources)?;
+        report.legacy_stored = ingest_legacy_sessions_filtered(store, embedder, config, sources)?;
     }
     Ok(report)
 }
@@ -94,7 +90,12 @@ pub fn ingest_legacy_sessions(
     embedder: &Embedder,
     config: &Config,
 ) -> Result<usize> {
-    Ok(ingest_legacy_sessions_filtered(store, embedder, config, &[])?)
+    Ok(ingest_legacy_sessions_filtered(
+        store,
+        embedder,
+        config,
+        &[],
+    )?)
 }
 
 fn ingest_legacy_sessions_filtered(
@@ -164,7 +165,10 @@ fn ingest_legacy_file_if_changed(
             continue;
         }
 
-        let topic = format!("legacy-{source_label}-{:x}", idx as u64 ^ digest.len() as u64);
+        let topic = format!(
+            "legacy-{source_label}-{:x}",
+            idx as u64 ^ digest.len() as u64
+        );
         let hash = content_hash(&fact);
         let embedding = embedder.embed_one(&format!("{topic} {fact}"))?;
         let res = store.store_fact(
@@ -257,7 +261,10 @@ mod tests {
 
     #[test]
     fn truncates_long_facts() {
-        let words: String = (0..60).map(|i| format!("word{i}")).collect::<Vec<_>>().join(" ");
+        let words: String = (0..60)
+            .map(|i| format!("word{i}"))
+            .collect::<Vec<_>>()
+            .join(" ");
         assert_eq!(truncate_words(&words, 50).split_whitespace().count(), 50);
     }
 }

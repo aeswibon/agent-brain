@@ -56,7 +56,11 @@ fn path_matches(pattern_str: &str, ctx: &MatchContext<'_>) -> bool {
             return true;
         }
         if let Some(root) = ctx.repo_root {
-            let joined = format!("{}/{}", root.trim_end_matches('/'), file.trim_start_matches('/'));
+            let joined = format!(
+                "{}/{}",
+                root.trim_end_matches('/'),
+                file.trim_start_matches('/')
+            );
             if pattern.matches(&joined) {
                 return true;
             }

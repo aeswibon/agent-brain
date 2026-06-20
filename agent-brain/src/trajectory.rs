@@ -22,12 +22,7 @@ pub fn normalize_outcome(outcome: &str) -> Result<&'static str> {
         .iter()
         .find(|o| **o == lower)
         .copied()
-        .ok_or_else(|| {
-            anyhow::anyhow!(
-                "outcome must be one of: {}",
-                ALLOWED_OUTCOMES.join(", ")
-            )
-        })
+        .ok_or_else(|| anyhow::anyhow!("outcome must be one of: {}", ALLOWED_OUTCOMES.join(", ")))
 }
 
 pub fn store_trajectory(

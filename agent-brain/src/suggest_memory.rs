@@ -67,15 +67,15 @@ pub fn approve_pending(engine: &Engine) -> Result<ApproveReport> {
         topic: parsed.topic,
         fact: parsed.fact,
         polarity: parsed.polarity,
-        stored: value.get("stored").and_then(|v| v.as_bool()).unwrap_or(false),
+        stored: value
+            .get("stored")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
         deduplicated: value
             .get("deduplicated")
             .and_then(|v| v.as_bool())
             .unwrap_or(false),
-        id: value
-            .get("id")
-            .and_then(|v| v.as_str())
-            .map(str::to_string),
+        id: value.get("id").and_then(|v| v.as_str()).map(str::to_string),
         apply_when,
     })
 }
@@ -106,10 +106,7 @@ fn parse_suggestion(raw: &Value) -> Result<ParsedSuggestion> {
         .and_then(|v| v.as_str())
         .unwrap_or("negative")
         .to_string();
-    let path = raw
-        .get("path")
-        .and_then(|v| v.as_str())
-        .map(str::to_string);
+    let path = raw.get("path").and_then(|v| v.as_str()).map(str::to_string);
     Ok(ParsedSuggestion {
         topic,
         fact,

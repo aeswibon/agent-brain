@@ -209,11 +209,7 @@ impl AnnIndex {
     }
 
     fn neighbors_of(&self, node: usize) -> Vec<usize> {
-        let mut out: Vec<usize> = self
-            .graph
-            .get(node)
-            .cloned()
-            .unwrap_or_default();
+        let mut out: Vec<usize> = self.graph.get(node).cloned().unwrap_or_default();
         if let Some(bridge) = self.bridge_edges.get(node) {
             for nb in bridge {
                 if !out.contains(nb) {

@@ -46,7 +46,10 @@ struct RouteTaskParams {
     open_files: Vec<String>,
     #[serde(default = "default_max_tokens")]
     max_tokens: usize,
-    #[serde(default = "default_route_limits", deserialize_with = "deserialize_route_limits")]
+    #[serde(
+        default = "default_route_limits",
+        deserialize_with = "deserialize_route_limits"
+    )]
     #[schemars(default = "default_route_limits")]
     limits: RouteLimits,
     #[serde(default)]
@@ -310,17 +313,16 @@ fn default_node_tokens() -> usize {
 
 #[tool_router]
 impl BrainMcp {
-    #[tool(description = "REQUIRED every turn before planning or edits. Returns ranked agents, skills, rules, and memory under a token budget. Pass user_message, current_working_directory, and open_files. Session digests from Cursor/OpenCode/Codex/Gemini/Antigravity and team memory are only injected here.")]
+    #[tool(
+        description = "REQUIRED every turn before planning or edits. Returns ranked agents, skills, rules, and memory under a token budget. Pass user_message, current_working_directory, and open_files. Session digests from Cursor/OpenCode/Codex/Gemini/Antigravity and team memory are only injected here."
+    )]
     async fn route_task(
         &self,
         params: Parameters<RouteTaskParams>,
     ) -> Result<CallToolResult, McpError> {
         let _req = self.engine.mcp_activity.begin_request();
         let p = params.0;
-        let cwd = p
-            .current_working_directory
-            .as_ref()
-            .map(PathBuf::from);
+        let cwd = p.current_working_directory.as_ref().map(PathBuf::from);
         let resp = self
             .engine
             .route_task(
@@ -337,7 +339,9 @@ impl BrainMcp {
         json_result(resp)
     }
 
-    #[tool(description = "Lower-level flat context retrieval. Requires route_task first in this turn.")]
+    #[tool(
+        description = "Lower-level flat context retrieval. Requires route_task first in this turn."
+    )]
     async fn get_context(
         &self,
         params: Parameters<GetContextParams>,
@@ -345,10 +349,7 @@ impl BrainMcp {
         self.require_route("get_context")?;
         let _req = self.engine.mcp_activity.begin_request();
         let p = params.0;
-        let cwd = p
-            .current_working_directory
-            .as_ref()
-            .map(PathBuf::from);
+        let cwd = p.current_working_directory.as_ref().map(PathBuf::from);
         let types: Vec<ItemType> = p
             .include_types
             .iter()
@@ -356,17 +357,14 @@ impl BrainMcp {
             .collect();
         let resp = self
             .engine
-            .get_context(
-                &p.task_description,
-                cwd.as_deref(),
-                p.max_tokens,
-                &types,
-            )
+            .get_context(&p.task_description, cwd.as_deref(), p.max_tokens, &types)
             .map_err(|e| McpError::internal_error(format!("{e}"), None))?;
         json_result(resp)
     }
 
-    #[tool(description = "Fetch specialized rules/skills/agents for a workflow node. Call from agent-spine before executing a node to hydrate subagent prompts with brain context.")]
+    #[tool(
+        description = "Fetch specialized rules/skills/agents for a workflow node. Call from agent-spine before executing a node to hydrate subagent prompts with brain context."
+    )]
     async fn get_context_for_node(
         &self,
         params: Parameters<GetContextForNodeParams>,
@@ -381,16 +379,15 @@ impl BrainMcp {
             workflow_name: p.workflow_name,
             task_description: p.task_description,
         };
-        let resp = crate::node_context::get_context_for_node(
-            &self.engine,
-            &ctx_params,
-            p.max_tokens,
-        )
-        .map_err(|e| McpError::internal_error(format!("{e}"), None))?;
+        let resp =
+            crate::node_context::get_context_for_node(&self.engine, &ctx_params, p.max_tokens)
+                .map_err(|e| McpError::internal_error(format!("{e}"), None))?;
         json_result(resp)
     }
 
-    #[tool(description = "REQUIRED at task end for durable decisions. Max 50 words. No secrets. Optional valid_from/invalid_at (unix ms). Requires route_task first in this turn.")]
+    #[tool(
+        description = "REQUIRED at task end for durable decisions. Max 50 words. No secrets. Optional valid_from/invalid_at (unix ms). Requires route_task first in this turn."
+    )]
     async fn store_memory(
         &self,
         params: Parameters<StoreMemoryParams>,
@@ -433,7 +430,11 @@ impl BrainMcp {
                     fact: p.fact,
                     scope: p.scope,
                     scope_key,
-                    confidence: if p.confidence == 0.0 { 0.9 } else { p.confidence },
+                    confidence: if p.confidence == 0.0 {
+                        0.9
+                    } else {
+                        p.confidence
+                    },
                     polarity,
                     apply_when: p.apply_when,
                     valid_from: p.valid_from,
@@ -449,7 +450,9 @@ impl BrainMcp {
         json_result(value)
     }
 
-    #[tool(description = "Record orchestrator workflow node outcome for learning loops. Links optional route_log_id from route_task. Does not require route_task in this turn.")]
+    #[tool(
+        description = "Record orchestrator workflow node outcome for learning loops. Links optional route_log_id from route_task. Does not require route_task in this turn."
+    )]
     async fn store_trajectory(
         &self,
         params: Parameters<StoreTrajectoryParams>,
@@ -517,9 +520,10 @@ impl BrainMcp {
     ) -> Result<CallToolResult, McpError> {
         self.require_route("export_memory")?;
         let _req = self.engine.mcp_activity.begin_request();
-        let filename = params.0.filename.unwrap_or_else(|| {
-            format!("export-{}.json", chrono::Utc::now().timestamp())
-        });
+        let filename = params
+            .0
+            .filename
+            .unwrap_or_else(|| format!("export-{}.json", chrono::Utc::now().timestamp()));
         let path = self.engine.config.home.join("export").join(filename);
         let written = self
             .engine
@@ -556,11 +560,9 @@ impl BrainMcp {
     ) -> Result<CallToolResult, McpError> {
         self.require_route("explain_last_context")?;
         let _req = self.engine.mcp_activity.begin_request();
-        let explain = crate::observability::explain_last(
-            &self.engine.store,
-            params.0.log_id.as_deref(),
-        )
-        .map_err(|e| McpError::internal_error(format!("{e}"), None))?;
+        let explain =
+            crate::observability::explain_last(&self.engine.store, params.0.log_id.as_deref())
+                .map_err(|e| McpError::internal_error(format!("{e}"), None))?;
         json_result(serde_json::json!({ "context": explain }))
     }
 
@@ -586,7 +588,9 @@ impl BrainMcp {
         json_result(report)
     }
 
-    #[tool(description = "Call a configured upstream MCP tool. Response is semantically truncated to max_tokens. Agent must call explicitly; router never auto-executes upstream tools.")]
+    #[tool(
+        description = "Call a configured upstream MCP tool. Response is semantically truncated to max_tokens. Agent must call explicitly; router never auto-executes upstream tools."
+    )]
     async fn route_to_mcp(
         &self,
         params: Parameters<RouteToMcpParams>,
@@ -596,12 +600,13 @@ impl BrainMcp {
         let _req = self.engine.mcp_activity.begin_request();
         let p = params.0;
         let settings = crate::settings::AgentBrainSettings::load(&self.engine.config.home);
-        let server = crate::upstream::find_server(&settings.upstream_mcp, &p.server).ok_or_else(|| {
-            McpError::invalid_params(
-                format!("unknown or disabled upstream server: {}", p.server),
-                None,
-            )
-        })?;
+        let server =
+            crate::upstream::find_server(&settings.upstream_mcp, &p.server).ok_or_else(|| {
+                McpError::invalid_params(
+                    format!("unknown or disabled upstream server: {}", p.server),
+                    None,
+                )
+            })?;
         let arguments = if p.arguments.is_null() {
             serde_json::json!({})
         } else {
@@ -612,12 +617,9 @@ impl BrainMcp {
             .map_err(|e| McpError::internal_error(format!("{e}"), None))?;
         let is_error = result.is_error.unwrap_or(false);
         let (raw, structured) = crate::upstream::call_tool_result_to_text(&result);
-        let truncated = crate::upstream::truncate_upstream_result(
-            &raw,
-            structured.as_ref(),
-            p.max_tokens,
-        )
-        .map_err(|e| McpError::internal_error(format!("{e}"), None))?;
+        let truncated =
+            crate::upstream::truncate_upstream_result(&raw, structured.as_ref(), p.max_tokens)
+                .map_err(|e| McpError::internal_error(format!("{e}"), None))?;
         let log_id = uuid::Uuid::new_v4().to_string();
         let latency_ms = started.elapsed().as_millis() as u64;
         if let Err(err) = crate::observability::log_upstream_call(
@@ -644,7 +646,9 @@ impl BrainMcp {
         }))
     }
 
-    #[tool(description = "Stage a SKILL.md draft from a memory fact. Requires human approve via agent-brain promote approve.")]
+    #[tool(
+        description = "Stage a SKILL.md draft from a memory fact. Requires human approve via agent-brain promote approve."
+    )]
     async fn promote_to_skill(
         &self,
         params: Parameters<PromoteToSkillParams>,
@@ -675,7 +679,9 @@ impl BrainMcp {
         }))
     }
 
-    #[tool(description = "Token-efficient file metadata — bytes, line count, and a 5-line sample. Prefer over full Read/cat on unknown files.")]
+    #[tool(
+        description = "Token-efficient file metadata — bytes, line count, and a 5-line sample. Prefer over full Read/cat on unknown files."
+    )]
     async fn file_summary(
         &self,
         params: Parameters<TokenToolPathParams>,
@@ -692,7 +698,9 @@ impl BrainMcp {
         json_result(resp)
     }
 
-    #[tool(description = "Read the first N lines of a file (default 200, max bytes capped). Use before full file reads.")]
+    #[tool(
+        description = "Read the first N lines of a file (default 200, max bytes capped). Use before full file reads."
+    )]
     async fn read_file_head(
         &self,
         params: Parameters<ReadFileBoundedParams>,
@@ -715,7 +723,9 @@ impl BrainMcp {
         json_result(resp)
     }
 
-    #[tool(description = "Read the last N lines of a file (default 200, max bytes capped). Good for logs.")]
+    #[tool(
+        description = "Read the last N lines of a file (default 200, max bytes capped). Good for logs."
+    )]
     async fn read_file_tail(
         &self,
         params: Parameters<ReadFileBoundedParams>,
@@ -738,7 +748,9 @@ impl BrainMcp {
         json_result(resp)
     }
 
-    #[tool(description = "Search file or directory for a pattern (rg-style line output). Prefer over reading whole files to find a string.")]
+    #[tool(
+        description = "Search file or directory for a pattern (rg-style line output). Prefer over reading whole files to find a string."
+    )]
     async fn grep_search(
         &self,
         params: Parameters<GrepSearchParams>,
@@ -762,7 +774,9 @@ impl BrainMcp {
         json_result(resp)
     }
 
-    #[tool(description = "Deep codebase navigation via graphify graph. Call for unfamiliar code paths — not every turn.")]
+    #[tool(
+        description = "Deep codebase navigation via graphify graph. Call for unfamiliar code paths — not every turn."
+    )]
     async fn query_codebase(
         &self,
         params: Parameters<QueryCodebaseParams>,
@@ -782,7 +796,9 @@ impl BrainMcp {
         json_result(serde_json::json!({ "answer": text }))
     }
 
-    #[tool(description = "Queue graphify semantic/AST rebuild for an unfamiliar or stale codebase. Returns job_id — poll graphify_job_status.")]
+    #[tool(
+        description = "Queue graphify semantic/AST rebuild for an unfamiliar or stale codebase. Returns job_id — poll graphify_job_status."
+    )]
     async fn trigger_deep_analysis(
         &self,
         params: Parameters<TriggerDeepAnalysisParams>,
@@ -824,7 +840,9 @@ impl BrainMcp {
         json_result(status)
     }
 
-    #[tool(description = "Fetch allowlisted HTTPS documentation, index as skills, and store a summary memory. Requires route_task first. Domain must be in docs.allowed_domains.")]
+    #[tool(
+        description = "Fetch allowlisted HTTPS documentation, index as skills, and store a summary memory. Requires route_task first. Domain must be in docs.allowed_domains."
+    )]
     async fn learn_from_url(
         &self,
         params: Parameters<LearnFromUrlParams>,
@@ -832,13 +850,9 @@ impl BrainMcp {
         self.require_route("learn_from_url")?;
         let _req = self.engine.mcp_activity.begin_request();
         let p = params.0;
-        let report = crate::docs::learn_from_url(
-            &self.engine,
-            &p.url,
-            p.topic.as_deref(),
-            p.dry_run,
-        )
-        .map_err(|e| McpError::invalid_params(format!("{e}"), None))?;
+        let report =
+            crate::docs::learn_from_url(&self.engine, &p.url, p.topic.as_deref(), p.dry_run)
+                .map_err(|e| McpError::invalid_params(format!("{e}"), None))?;
         json_result(report)
     }
 
@@ -848,7 +862,8 @@ impl BrainMcp {
         path: Option<&str>,
         resp: &crate::token_tools::TokenToolResponse,
     ) {
-        let (must_apply_active, phase, route_log_id) = route_context_from_state(&self.engine.config.home);
+        let (must_apply_active, phase, route_log_id) =
+            route_context_from_state(&self.engine.config.home);
         if let Err(err) = crate::observability::log_native_tool_use(
             &self.engine.store,
             tool_name,
@@ -864,8 +879,14 @@ impl BrainMcp {
         }
     }
 
-    fn log_grep_tool(&self, tool_name: &str, path: Option<&str>, resp: &crate::token_tools::GrepResponse) {
-        let (must_apply_active, phase, route_log_id) = route_context_from_state(&self.engine.config.home);
+    fn log_grep_tool(
+        &self,
+        tool_name: &str,
+        path: Option<&str>,
+        resp: &crate::token_tools::GrepResponse,
+    ) {
+        let (must_apply_active, phase, route_log_id) =
+            route_context_from_state(&self.engine.config.home);
         if let Err(err) = crate::observability::log_native_tool_use(
             &self.engine.store,
             tool_name,
@@ -918,10 +939,11 @@ fn resolve_graphify_repo(cwd: Option<&str>) -> Result<PathBuf, McpError> {
     let path = cwd
         .map(PathBuf::from)
         .or_else(|| std::env::current_dir().ok())
-        .ok_or_else(|| McpError::invalid_params("current_working_directory required".to_string(), None))?;
-    std::fs::canonicalize(&path).map_err(|e| {
-        McpError::invalid_params(format!("resolve repo root: {e}"), None)
-    })
+        .ok_or_else(|| {
+            McpError::invalid_params("current_working_directory required".to_string(), None)
+        })?;
+    std::fs::canonicalize(&path)
+        .map_err(|e| McpError::invalid_params(format!("resolve repo root: {e}"), None))
 }
 
 fn infer_memory_polarity(fact: &str) -> Option<String> {

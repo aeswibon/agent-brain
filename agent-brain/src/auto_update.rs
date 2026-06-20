@@ -83,8 +83,7 @@ pub fn run(
 
     let home = &engine.config.home;
     let mut state = AutoUpdateState::load(home);
-    let check_mcp = cfg.mcp.enabled
-        && (force || should_check_mcp(cfg, &state, options));
+    let check_mcp = cfg.mcp.enabled && (force || should_check_mcp(cfg, &state, options));
     let check_packages = should_check_packages(cfg, &state, force, mcp_only);
 
     if !check_mcp && !check_packages {
@@ -228,7 +227,10 @@ fn update_configured_packages(engine: &Arc<Engine>, cfg: &AutoUpdateSettings) ->
     for name in before.iter().map(|(n, _)| n) {
         let pkgs = packages::update_packages(&engine.config, Some(name))?;
         for pkg in pkgs {
-            let prev = before.iter().find(|(n, _)| n == &pkg.name).map(|(_, c)| c.as_deref());
+            let prev = before
+                .iter()
+                .find(|(n, _)| n == &pkg.name)
+                .map(|(_, c)| c.as_deref());
             if prev != Some(pkg.commit.as_deref()) {
                 updated += 1;
                 tracing::info!(
@@ -445,8 +447,10 @@ fn resolve_latest_mcp_release(
     target: &str,
     asset: &str,
 ) -> Result<(String, String)> {
-    let latest_download =
-        format!("https://github.com/{}/releases/latest/download/{asset}", cfg.mcp.repo);
+    let latest_download = format!(
+        "https://github.com/{}/releases/latest/download/{asset}",
+        cfg.mcp.repo
+    );
     match probe_release_tag_via_redirect(&latest_download) {
         Ok(tag) => Ok((
             tag.clone(),
@@ -475,15 +479,16 @@ fn resolve_latest_mcp_release(
 
 fn probe_release_tag_via_redirect(latest_download_url: &str) -> Result<String> {
     let location = curl_first_redirect_location(latest_download_url)?;
-    parse_release_tag_from_github_location(&location).with_context(|| {
-        format!("parse release tag from GitHub redirect: {location}")
-    })
+    parse_release_tag_from_github_location(&location)
+        .with_context(|| format!("parse release tag from GitHub redirect: {location}"))
 }
 
 /// Tag from `https://github.com/{owner}/{repo}/releases/download/{tag}/{asset}`.
 pub fn parse_release_tag_from_github_location(location: &str) -> Option<String> {
     const MARKER: &str = "/releases/download/";
-    let rest = location.find(MARKER).map(|idx| &location[idx + MARKER.len()..])?;
+    let rest = location
+        .find(MARKER)
+        .map(|idx| &location[idx + MARKER.len()..])?;
     let tag = rest.split('/').next().filter(|s| !s.is_empty())?;
     Some(tag.to_string())
 }
@@ -521,11 +526,7 @@ fn release_download_url(repo: &str, tag: &str, asset: &str) -> String {
 
 fn resolve_release_asset(target: &str, release: &GhRelease) -> Result<String> {
     let asset = release_artifact_name(target);
-    if release
-        .assets
-        .iter()
-        .any(|entry| entry.name == asset)
-    {
+    if release.assets.iter().any(|entry| entry.name == asset) {
         return Ok(asset);
     }
 
@@ -612,10 +613,7 @@ fn curl_stdout(args: &[&str]) -> Result<String> {
         let stderr = String::from_utf8_lossy(&output.stderr);
         let url = args.iter().rev().find(|a| a.starts_with("http")).copied();
         if let Some(url) = url {
-            bail!(
-                "curl failed for {url} ({}): {stderr}",
-                output.status
-            );
+            bail!("curl failed for {url} ({}): {stderr}", output.status);
         }
         bail!("curl failed ({}): {stderr}", output.status);
     }
@@ -694,7 +692,11 @@ mod tests {
             &cfg,
             true
         ));
-        assert!(!should_schedule_mcp_restart(AutoUpdateRunOptions::cli(), &cfg, true));
+        assert!(!should_schedule_mcp_restart(
+            AutoUpdateRunOptions::cli(),
+            &cfg,
+            true
+        ));
     }
 
     #[test]

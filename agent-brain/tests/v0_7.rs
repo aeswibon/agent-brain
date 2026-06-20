@@ -59,7 +59,10 @@ fn local_cloud_settings(bucket: &std::path::Path) -> CloudSyncSettings {
 
 #[test]
 fn cloud_push_pull_round_trip_local_provider() {
-    std::env::set_var("AGENT_BRAIN_SYNC_KEY", "test-sync-passphrase-32-chars-min!!");
+    std::env::set_var(
+        "AGENT_BRAIN_SYNC_KEY",
+        "test-sync-passphrase-32-chars-min!!",
+    );
 
     let workspace = TempDir::new().unwrap();
     let cloud_bucket = workspace.path().join("cloud");

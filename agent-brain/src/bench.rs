@@ -9,8 +9,8 @@ use anyhow::{bail, Result};
 
 use crate::engine::Engine;
 use crate::fixture::{
-    default_fixture_2k_path, open_fixture_engine_with_onnx,
-    seed_bench_fixture, BENCH_FIXTURE_SKILLS,
+    default_fixture_2k_path, open_fixture_engine_with_onnx, seed_bench_fixture,
+    BENCH_FIXTURE_SKILLS,
 };
 use crate::fixture::{default_route_limits, new_isolated_engine};
 

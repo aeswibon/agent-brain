@@ -2,8 +2,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use agent_brain::{
-    auto_update, config::Config, doctor, engine::Engine, grpc, host_install, install, mcp, packages,
-    serve_meta, settings,
+    auto_update, config::Config, doctor, engine::Engine, grpc, host_install, install, mcp,
+    packages, serve_meta, settings,
 };
 use anyhow::{Context, Result};
 use tracing_subscriber::EnvFilter;
@@ -48,8 +48,7 @@ async fn main() -> Result<()> {
             if sub != "serve" {
                 anyhow::bail!("usage: agent-brain grpc serve [--addr HOST:PORT]");
             }
-            let addr = flag_value(&args, "--addr")
-                .unwrap_or_else(|| "127.0.0.1:7842".to_string());
+            let addr = flag_value(&args, "--addr").unwrap_or_else(|| "127.0.0.1:7842".to_string());
             let addr: std::net::SocketAddr = addr.parse().context("invalid --addr")?;
             let config = Config::load()?;
             let engine = Arc::new(Engine::new(config)?);
@@ -71,7 +70,9 @@ async fn main() -> Result<()> {
             println!("Indexed {n} items");
         }
         "add" => {
-            let source = args.get(2).context("missing package source (@alias, owner/repo, or GitHub URL)")?;
+            let source = args
+                .get(2)
+                .context("missing package source (@alias, owner/repo, or GitHub URL)")?;
             let git_ref = flag_value(&args, "--ref");
             let skip_index = args.iter().any(|a| a == "--no-index");
             let config = Config::load()?;
@@ -114,26 +115,24 @@ async fn main() -> Result<()> {
                 println!("Indexed {n} items");
             }
         }
-        "registry" => {
-            match args.get(2).map(String::as_str).unwrap_or("list") {
-                "list" => {
-                    for entry in packages::list_aliases()? {
-                        let source = if let Some(bundle) = &entry.bundle {
-                            format!("bundle:{bundle}")
-                        } else {
-                            entry.packages.join(", ")
-                        };
-                        println!("@{:<10}  {}  [{}]", entry.alias, entry.description, source);
-                    }
-                }
-                other => {
-                    eprintln!("Usage: agent-brain registry list");
-                    if !other.is_empty() {
-                        std::process::exit(1);
-                    }
+        "registry" => match args.get(2).map(String::as_str).unwrap_or("list") {
+            "list" => {
+                for entry in packages::list_aliases()? {
+                    let source = if let Some(bundle) = &entry.bundle {
+                        format!("bundle:{bundle}")
+                    } else {
+                        entry.packages.join(", ")
+                    };
+                    println!("@{:<10}  {}  [{}]", entry.alias, entry.description, source);
                 }
             }
-        }
+            other => {
+                eprintln!("Usage: agent-brain registry list");
+                if !other.is_empty() {
+                    std::process::exit(1);
+                }
+            }
+        },
         "package" => {
             let sub = args.get(2).map(String::as_str).unwrap_or("list");
             let config = Config::load()?;
@@ -183,9 +182,7 @@ async fn main() -> Result<()> {
             let print_only = args.iter().any(|a| a == "--print-only");
             let global = args.iter().any(|a| a == "--global");
             install::run(target, print_only, reload)?;
-            if (global || matches!(target, host_install::HostTarget::All))
-                && !print_only
-            {
+            if (global || matches!(target, host_install::HostTarget::All)) && !print_only {
                 let config = Config::load()?;
                 if settings::config_path_optional(&config.home).is_none() {
                     let path = settings::AgentBrainSettings::save_default(&config.home)?;
@@ -241,18 +238,16 @@ async fn main() -> Result<()> {
                     let path = settings::AgentBrainSettings::save_default(&config.home)?;
                     println!("Wrote {}", path.display());
                 }
-                "show" => {
-                    match settings::config_path_optional(&config.home) {
-                        Some(path) => {
-                            let raw = std::fs::read_to_string(&path)?;
-                            print!("{raw}");
-                        }
-                        None => {
-                            eprintln!("No config file. Run: agent-brain config init");
-                            std::process::exit(1);
-                        }
+                "show" => match settings::config_path_optional(&config.home) {
+                    Some(path) => {
+                        let raw = std::fs::read_to_string(&path)?;
+                        print!("{raw}");
                     }
-                }
+                    None => {
+                        eprintln!("No config file. Run: agent-brain config init");
+                        std::process::exit(1);
+                    }
+                },
                 _ => {
                     eprintln!("Unknown config subcommand: {sub}");
                     print_usage();
@@ -273,8 +268,13 @@ async fn main() -> Result<()> {
                 eprintln!("Briefings are written to {}", path.display());
                 std::process::exit(1);
             }
-            if let Some(suggestion) = agent_brain::route_briefing::read_anti_pattern_suggestion(&config.home) {
-                println!("\n---\nSuggested store_memory (from hook):\n{}\n", serde_json::to_string_pretty(&suggestion)?);
+            if let Some(suggestion) =
+                agent_brain::route_briefing::read_anti_pattern_suggestion(&config.home)
+            {
+                println!(
+                    "\n---\nSuggested store_memory (from hook):\n{}\n",
+                    serde_json::to_string_pretty(&suggestion)?
+                );
             }
         }
         "learn" => {
@@ -283,9 +283,9 @@ async fn main() -> Result<()> {
             let sub = args.get(2).map(String::as_str).unwrap_or("");
             match sub {
                 "url" => {
-                    let url = args
-                        .get(3)
-                        .context("usage: agent-brain learn url <https-url> [--topic NAME] [--dry-run]")?;
+                    let url = args.get(3).context(
+                        "usage: agent-brain learn url <https-url> [--topic NAME] [--dry-run]",
+                    )?;
                     let topic = flag_value(&args, "--topic");
                     let dry_run = args.iter().any(|a| a == "--dry-run");
                     let report =
@@ -299,7 +299,9 @@ async fn main() -> Result<()> {
                     }
                 }
                 _ => {
-                    eprintln!("Usage: agent-brain learn url <https-url> [--topic NAME] [--dry-run]");
+                    eprintln!(
+                        "Usage: agent-brain learn url <https-url> [--topic NAME] [--dry-run]"
+                    );
                     eprintln!("       agent-brain learn allowlist");
                     std::process::exit(1);
                 }
@@ -308,7 +310,11 @@ async fn main() -> Result<()> {
         "graphify" => {
             let config = Config::load()?;
             let engine = Arc::new(Engine::new(config)?);
-            let sub = args.get(2).map(String::as_str).unwrap_or("status").to_string();
+            let sub = args
+                .get(2)
+                .map(String::as_str)
+                .unwrap_or("status")
+                .to_string();
             let cli = agent_brain::graphify::GraphifyCli {
                 sub: sub.clone(),
                 repo: flag_value(&args, "--repo").map(std::path::PathBuf::from),
@@ -316,7 +322,9 @@ async fn main() -> Result<()> {
                 mode: flag_value(&args, "--mode"),
                 job_id: flag_value(&args, "--id"),
                 question: flag_value(&args, "--question").or_else(|| {
-                    args.get(3).filter(|_| matches!(sub.as_str(), "query")).cloned()
+                    args.get(3)
+                        .filter(|_| matches!(sub.as_str(), "query"))
+                        .cloned()
                 }),
                 budget: flag_value(&args, "--budget")
                     .and_then(|s| s.parse().ok())
@@ -426,8 +434,7 @@ async fn main() -> Result<()> {
                     let cloud_cmd = args.get(3).map(String::as_str).unwrap_or("help");
                     match cloud_cmd {
                         "push" => {
-                            let store =
-                                agent_brain::db::store::BrainStore::open(&config.db_path)?;
+                            let store = agent_brain::db::store::BrainStore::open(&config.db_path)?;
                             agent_brain::sync::cloud_push(
                                 &store,
                                 &config.home,
@@ -440,10 +447,8 @@ async fn main() -> Result<()> {
                         }
                         "pull" => {
                             let engine = Arc::new(Engine::new(config)?);
-                            let report = agent_brain::sync::cloud_pull(
-                                &engine,
-                                &brain_settings.sync.cloud,
-                            )?;
+                            let report =
+                                agent_brain::sync::cloud_pull(&engine, &brain_settings.sync.cloud)?;
                             engine.bootstrap(None)?;
                             println!(
                                 "Pulled and imported {} facts (deduped {}, conflicts {}, skipped {})",
@@ -463,11 +468,14 @@ async fn main() -> Result<()> {
                     let git_cmd = args.get(3).map(String::as_str).unwrap_or("help");
                     match git_cmd {
                         "init" => {
-                            let remote = flag_value(&args, "--remote")
-                                .or_else(|| {
-                                    let r = brain_settings.sync.git.remote.clone();
-                                    if r.is_empty() { None } else { Some(r) }
-                                });
+                            let remote = flag_value(&args, "--remote").or_else(|| {
+                                let r = brain_settings.sync.git.remote.clone();
+                                if r.is_empty() {
+                                    None
+                                } else {
+                                    Some(r)
+                                }
+                            });
                             let branch = brain_settings.sync.git.branch.clone();
                             let root = agent_brain::sync::init_git_repo(
                                 &config.home,
@@ -485,29 +493,35 @@ async fn main() -> Result<()> {
                             let remote = flag_value(&args, "--remote")
                                 .or_else(|| {
                                     let r = brain_settings.sync.git.remote.clone();
-                                    if r.is_empty() { None } else { Some(r) }
+                                    if r.is_empty() {
+                                        None
+                                    } else {
+                                        Some(r)
+                                    }
                                 })
                                 .context("usage: agent-brain sync git clone [--remote URL]")?;
                             let branch = brain_settings.sync.git.branch.clone();
-                            let root = agent_brain::sync::git_clone(
-                                &config.home,
-                                &remote,
-                                &branch,
-                            )?;
+                            let root =
+                                agent_brain::sync::git_clone(&config.home, &remote, &branch)?;
                             println!("Cloned sync repo to {}", root.display());
                             eprintln!("Run: agent-brain sync git pull");
                         }
                         "push" => {
                             let store = agent_brain::db::store::BrainStore::open(&config.db_path)?;
-                            agent_brain::sync::git_push(&store, &config.home, &brain_settings.sync.git)?;
-                            println!("Pushed memory bundle to origin/{}", brain_settings.sync.git.branch);
+                            agent_brain::sync::git_push(
+                                &store,
+                                &config.home,
+                                &brain_settings.sync.git,
+                            )?;
+                            println!(
+                                "Pushed memory bundle to origin/{}",
+                                brain_settings.sync.git.branch
+                            );
                         }
                         "pull" => {
                             let engine = Arc::new(Engine::new(config)?);
-                            let report = agent_brain::sync::git_pull(
-                                &engine,
-                                &brain_settings.sync.git,
-                            )?;
+                            let report =
+                                agent_brain::sync::git_pull(&engine, &brain_settings.sync.git)?;
                             engine.bootstrap(None)?;
                             println!(
                                 "Pulled and imported {} facts (deduped {}, conflicts {}, skipped {})",
@@ -562,8 +576,8 @@ async fn main() -> Result<()> {
                     let name = args
                         .get(3)
                         .context("usage: agent-brain secrets add <NAME> --used-by <target>")?;
-                    let used_by = flag_value(&args, "--used-by")
-                        .unwrap_or_else(|| "upstream_mcp".into());
+                    let used_by =
+                        flag_value(&args, "--used-by").unwrap_or_else(|| "upstream_mcp".into());
                     store.upsert_secret_ref(name, &used_by)?;
                     println!("Registered secret ref {name} (used by {used_by})");
                 }
@@ -641,11 +655,7 @@ async fn main() -> Result<()> {
                         agent_brain::embed::parse_embedding_model(&config.embedding_model),
                     )?;
                     let report = agent_brain::sessions::ingest_sessions_filtered(
-                        &store,
-                        &embedder,
-                        &config,
-                        &sources,
-                        legacy,
+                        &store, &embedder, &config, &sources, legacy,
                     )?;
                     if report.digests_stored > 0 || report.legacy_stored > 0 {
                         store.bump_index_version()?;
@@ -657,8 +667,7 @@ async fn main() -> Result<()> {
                 }
                 "status" => {
                     let discoverable = agent_brain::sessions::discover_report(&config)?;
-                    let stored =
-                        agent_brain::sessions::count_stored_digests_by_source(&store)?;
+                    let stored = agent_brain::sessions::count_stored_digests_by_source(&store)?;
                     println!(
                         "{}",
                         serde_json::to_string_pretty(&serde_json::json!({
@@ -707,7 +716,9 @@ async fn main() -> Result<()> {
                     println!("Rejected staging {id}");
                 }
                 _ => {
-                    eprintln!("Usage: agent-brain promote list [--status pending|approved|rejected]");
+                    eprintln!(
+                        "Usage: agent-brain promote list [--status pending|approved|rejected]"
+                    );
                     eprintln!("       agent-brain promote approve <staging-id>");
                     eprintln!("       agent-brain promote reject <staging-id>");
                     std::process::exit(1);
@@ -751,16 +762,19 @@ async fn main() -> Result<()> {
                         min_facts_per_topic: brain_settings.observation.min_facts_per_topic,
                         window_days: brain_settings.observation.window_days,
                     };
-                    let report =
-                        agent_brain::observation::run_observations(&store, &embedder, &cfg, dry_run)?;
+                    let report = agent_brain::observation::run_observations(
+                        &store, &embedder, &cfg, dry_run,
+                    )?;
                     println!("{}", serde_json::to_string_pretty(&report)?);
                 }
                 "extract" => {
                     let dry_run = args.iter().any(|a| a == "--dry-run");
                     let explain = args.iter().any(|a| a == "--explain");
                     if explain {
-                        let explanations =
-                            agent_brain::trace_extract::explain_pending_traces(&store, &config.home)?;
+                        let explanations = agent_brain::trace_extract::explain_pending_traces(
+                            &store,
+                            &config.home,
+                        )?;
                         println!("{}", serde_json::to_string_pretty(&explanations)?);
                         return Ok(());
                     }
@@ -798,7 +812,10 @@ async fn main() -> Result<()> {
             let config = Config::load()?;
             let store = agent_brain::db::store::BrainStore::open(&config.db_path)?;
             let digest = agent_brain::operator_digest::weekly_digest(&store, 7)?;
-            println!("{}", agent_brain::operator_digest::format_weekly_digest(&digest));
+            println!(
+                "{}",
+                agent_brain::operator_digest::format_weekly_digest(&digest)
+            );
         }
         "stats" => {
             let json = args.iter().any(|a| a == "--json");
@@ -874,29 +891,33 @@ async fn main() -> Result<()> {
                 }
             } else if !args.iter().any(|a| a == "--ci") {
                 eprintln!("Usage: agent-brain eval --ci [--live]");
-                eprintln!("       agent-brain eval --beam              BEAM memory+routing harness");
+                eprintln!(
+                    "       agent-brain eval --beam              BEAM memory+routing harness"
+                );
                 eprintln!("       agent-brain eval --skills-sh [--fixture-db PATH] [--seed] [--write PATH]");
                 eprintln!("  --ci            Run Recall@3 gate (default: isolated fixture DB)");
                 eprintln!("  --live          Use ~/.agent_brain brain.db (not for CI)");
                 eprintln!("  --skills-sh     Run skills.sh Recall@3 (~2000 index)");
                 eprintln!("  --fixture-db    Committed benchmark DB (default: docs/benchmarks/fixture-2k.db)");
-                eprintln!("  --seed          Seed index at runtime from snapshot instead of fixture DB");
+                eprintln!(
+                    "  --seed          Seed index at runtime from snapshot instead of fixture DB"
+                );
                 std::process::exit(1);
             } else {
-            let report = if live {
-                let mut config = Config::load()?;
-                config.bootstrap_background = false;
-                config.session_ingest_background = false;
-                let engine = Arc::new(Engine::new(config)?);
-                agent_brain::eval::run_ci_eval(&engine)?
-            } else {
-                agent_brain::eval::run_ci_eval_isolated()?
-            };
-            println!("{}", serde_json::to_string_pretty(&report)?);
-            if let Err(err) = agent_brain::eval::assert_ci_gate(&report) {
-                eprintln!("{err}");
-                std::process::exit(1);
-            }
+                let report = if live {
+                    let mut config = Config::load()?;
+                    config.bootstrap_background = false;
+                    config.session_ingest_background = false;
+                    let engine = Arc::new(Engine::new(config)?);
+                    agent_brain::eval::run_ci_eval(&engine)?
+                } else {
+                    agent_brain::eval::run_ci_eval_isolated()?
+                };
+                println!("{}", serde_json::to_string_pretty(&report)?);
+                if let Err(err) = agent_brain::eval::assert_ci_gate(&report) {
+                    eprintln!("{err}");
+                    std::process::exit(1);
+                }
             }
         }
         "fixture" => {
@@ -981,9 +1002,7 @@ async fn main() -> Result<()> {
                         .and_then(|v| v.parse().ok())
                         .unwrap_or(if required_only { 20_000 } else { 400 });
                     let mut options = agent_brain::skills_sh::SyncOptions::from_manifest(
-                        &manifest,
-                        target,
-                        delay_ms,
+                        &manifest, target, delay_ms,
                     );
                     if merge || write_path.exists() {
                         options.merge_path = Some(write_path.clone());
@@ -1008,8 +1027,7 @@ async fn main() -> Result<()> {
                     let delay_ms = flag_value(&args, "--delay-ms")
                         .and_then(|v| v.parse().ok())
                         .unwrap_or(200);
-                    let max_retries = flag_value(&args, "--max")
-                        .and_then(|v| v.parse().ok());
+                    let max_retries = flag_value(&args, "--max").and_then(|v| v.parse().ok());
                     let download_attempts = flag_value(&args, "--download-attempts")
                         .and_then(|v| v.parse().ok())
                         .unwrap_or(2);

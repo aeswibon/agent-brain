@@ -89,18 +89,25 @@ impl Config {
             turn_cache_ignore_open_files: std::env::var("AGENT_BRAIN_TURN_CACHE_OPEN_FILES")
                 .map(|v| v == "1" || v == "true")
                 .unwrap_or(false),
-            embedding_model: std::env::var("AGENT_BRAIN_EMBED_MODEL").unwrap_or_else(|_| "mini".into()),
+            embedding_model: std::env::var("AGENT_BRAIN_EMBED_MODEL")
+                .unwrap_or_else(|_| "mini".into()),
             bootstrap_startup_delay_secs: env_u64("AGENT_BRAIN_BOOTSTRAP_DELAY_SEC", 2),
             bootstrap_interval_secs: env_u64("AGENT_BRAIN_BOOTSTRAP_INTERVAL_SEC", 3600),
             auto_update_startup_delay_secs: env_u64("AGENT_BRAIN_AUTO_UPDATE_DELAY_SEC", 60),
             session_ingest_delay_secs: env_u64("AGENT_BRAIN_SESSION_INGEST_DELAY_SEC", 180),
-            session_ingest_route_interval_secs: env_u64("AGENT_BRAIN_SESSION_INGEST_ROUTE_INTERVAL", 300),
+            session_ingest_route_interval_secs: env_u64(
+                "AGENT_BRAIN_SESSION_INGEST_ROUTE_INTERVAL",
+                300,
+            ),
             route_briefing_enabled: env_bool("AGENT_BRAIN_ROUTE_BRIEFING", true),
             route_briefing_stderr: env_bool("AGENT_BRAIN_ROUTE_BRIEFING_STDERR", true),
             mcp_gate_enabled: env_bool("AGENT_BRAIN_MCP_GATE", true),
             mcp_gate_ttl_secs: env_u64("AGENT_BRAIN_MCP_GATE_TTL", 600),
             ann_enabled: env_bool("AGENT_BRAIN_ANN", true),
-            ann_min_index: env_usize("AGENT_BRAIN_ANN_MIN_INDEX", crate::ann::DEFAULT_ANN_MIN_INDEX),
+            ann_min_index: env_usize(
+                "AGENT_BRAIN_ANN_MIN_INDEX",
+                crate::ann::DEFAULT_ANN_MIN_INDEX,
+            ),
             ann_top_k: env_usize("AGENT_BRAIN_ANN_TOP_K", crate::ann::DEFAULT_ANN_TOP_K),
             workflow_dirs: vec![home.join("workflows")],
             home,

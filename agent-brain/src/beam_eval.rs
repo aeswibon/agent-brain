@@ -227,10 +227,7 @@ fn run_must_apply_suite(engine: &Engine) -> Result<SuiteResult> {
     let mut failures = Vec::new();
     for (query, expected_topic) in cases {
         let resp = engine.route_task(query, None, &[], 500, limits, Some("debugging"), None)?;
-        let hit = resp
-            .must_apply
-            .iter()
-            .any(|m| m.topic == expected_topic)
+        let hit = resp.must_apply.iter().any(|m| m.topic == expected_topic)
             || resp
                 .relevant_memory
                 .iter()
@@ -445,11 +442,7 @@ fn run_task_scoped_verification_suite(engine: &Engine) -> Result<SuiteResult> {
         failures.push(crate::eval::EvalFailure {
             suite: "task_scoped_verification",
             query: "verify BEAM proofs pass in CI".into(),
-            expected_topics: vec![
-                "agents<=1".into(),
-                "skills<=2".into(),
-                "memory<=3".into(),
-            ],
+            expected_topics: vec!["agents<=1".into(), "skills<=2".into(), "memory<=3".into()],
             got_topics: vec![
                 format!("agents={}", resp.recommended_agents.len()),
                 format!("skills={}", resp.recommended_skills.len()),
@@ -490,7 +483,11 @@ fn run_task_scoped_verification_suite(engine: &Engine) -> Result<SuiteResult> {
     ))
 }
 
-fn run_jsonl_file_suite(engine: &Engine, path: std::path::PathBuf, suite: &'static str) -> Result<SuiteResult> {
+fn run_jsonl_file_suite(
+    engine: &Engine,
+    path: std::path::PathBuf,
+    suite: &'static str,
+) -> Result<SuiteResult> {
     let raw = fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
     let cases: Vec<JsonlCase> = raw
         .lines()
@@ -743,7 +740,8 @@ fn seed_jsonl_fixture(store: &Arc<BrainStore>) -> Result<()> {
         "positive",
     )?;
 
-    let store_mem = "Store durable project conventions about error handling via store_memory at task end";
+    let store_mem =
+        "Store durable project conventions about error handling via store_memory at task end";
     let emb = deterministic_embedding(store_mem);
     store.store_fact(
         "store-memory",

@@ -55,7 +55,8 @@ pub fn sync_index(
     for (path, wf) in &workflows {
         let source_path = path.display().to_string();
         let content_hash = content_hash(&serde_json::to_string(wf).unwrap_or_default());
-        if store.indexed_item_current_hash(&source_path)?.as_deref() == Some(content_hash.as_str()) {
+        if store.indexed_item_current_hash(&source_path)?.as_deref() == Some(content_hash.as_str())
+        {
             continue;
         }
         let text = serde_json::to_string_pretty(wf).unwrap_or_default();
@@ -120,7 +121,10 @@ fn parse_file(path: &Path, repo: Option<&Path>, package: Option<String>) -> Opti
             name.clone(),
             extract_skill_text(&content, &name),
         )
-    } else if path.parent().map(|p| p.ends_with("commands")).unwrap_or(false)
+    } else if path
+        .parent()
+        .map(|p| p.ends_with("commands"))
+        .unwrap_or(false)
         || path.components().any(|c| c.as_os_str() == "commands")
     {
         let name = path
@@ -132,7 +136,10 @@ fn parse_file(path: &Path, repo: Option<&Path>, package: Option<String>) -> Opti
             format!("command:{name}"),
             extract_agent_text(&content, &name),
         )
-    } else if path.parent().map(|p| p.ends_with("agents")).unwrap_or(false)
+    } else if path
+        .parent()
+        .map(|p| p.ends_with("agents"))
+        .unwrap_or(false)
         || path.components().any(|c| c.as_os_str() == "agents")
     {
         let name = path
@@ -217,10 +224,7 @@ fn extract_activation_section(body: &str) -> Option<String> {
         "triggers",
         "trigger when",
     ];
-    let start = markers
-        .iter()
-        .filter_map(|m| lower.find(m))
-        .min()?;
+    let start = markers.iter().filter_map(|m| lower.find(m)).min()?;
     let slice = &body[start..];
     let section: String = slice
         .lines()
@@ -268,7 +272,11 @@ fn extract_agent_text(content: &str, name: &str) -> String {
 
 fn index_item(store: &BrainStore, embedder: &Embedder, item: &ParsedItem) -> Result<bool> {
     let hash = content_hash(&item.text);
-    if store.indexed_item_current_hash(&item.source_path)? .as_deref() == Some(hash.as_str()) {
+    if store
+        .indexed_item_current_hash(&item.source_path)?
+        .as_deref()
+        == Some(hash.as_str())
+    {
         return Ok(false);
     }
     let embedding = embedder.embed_one(&format!("{} {}", item.topic, item.text))?;

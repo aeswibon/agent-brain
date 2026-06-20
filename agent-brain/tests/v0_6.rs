@@ -54,13 +54,11 @@ fn git_push_pull_round_trip_via_bare_remote() {
 
     let workspace = TempDir::new().unwrap();
     let bare_path = workspace.path().join("bare.git");
-    assert!(
-        Command::new("git")
-            .args(["init", "--bare", bare_path.to_str().unwrap()])
-            .status()
-            .unwrap()
-            .success()
-    );
+    assert!(Command::new("git")
+        .args(["init", "--bare", bare_path.to_str().unwrap()])
+        .status()
+        .unwrap()
+        .success());
 
     let remote = format!("file://{}", bare_path.display());
     let settings = GitSyncSettings {
@@ -267,6 +265,9 @@ fn sync_restore_repromotes_loser_fact() {
         .expect("active lint fact");
     assert_eq!(active.fact, "Use ESLint flat config");
 
-    let row = store.get_conflict(&conflict_id).unwrap().expect("conflict row");
+    let row = store
+        .get_conflict(&conflict_id)
+        .unwrap()
+        .expect("conflict row");
     assert!(row.restored);
 }

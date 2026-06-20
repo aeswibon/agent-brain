@@ -33,12 +33,7 @@ pub fn query_codebase(
         return Ok(cached);
     }
     let output = Command::new(graphify_bin)
-        .args([
-            "query",
-            question,
-            "--budget",
-            &budget.to_string(),
-        ])
+        .args(["query", question, "--budget", &budget.to_string()])
         .current_dir(repo_root)
         .output()
         .with_context(|| format!("run {graphify_bin} query"))?;

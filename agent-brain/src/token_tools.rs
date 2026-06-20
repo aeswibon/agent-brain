@@ -79,7 +79,9 @@ pub fn resolve_tool_path(path: &str, cwd: Option<&Path>) -> Result<PathBuf> {
     } else if let Some(cwd) = cwd {
         cwd.join(raw)
     } else {
-        std::env::current_dir().context("resolve path: no cwd")?.join(raw)
+        std::env::current_dir()
+            .context("resolve path: no cwd")?
+            .join(raw)
     };
     match joined.canonicalize() {
         Ok(p) => Ok(p),
@@ -99,7 +101,11 @@ pub fn is_blocked_path(path: &Path, allow_blocked: bool) -> bool {
     })
 }
 
-pub fn file_summary(path: &Path, allow_blocked: bool, max_tokens: usize) -> Result<TokenToolResponse> {
+pub fn file_summary(
+    path: &Path,
+    allow_blocked: bool,
+    max_tokens: usize,
+) -> Result<TokenToolResponse> {
     if is_blocked_path(path, allow_blocked) {
         bail!("path is in a blocked directory (dist/, node_modules/, etc.); set allow_blocked_paths=true with user approval");
     }
@@ -270,7 +276,8 @@ pub fn grep_search(
                 }
                 full_bytes = full_bytes.saturating_add(meta.len());
             }
-            lines_skipped_oversized += grep_file(p, &re, limit.saturating_sub(matches.len()), &mut matches)?;
+            lines_skipped_oversized +=
+                grep_file(p, &re, limit.saturating_sub(matches.len()), &mut matches)?;
             if matches.len() >= limit {
                 break;
             }
@@ -572,9 +579,7 @@ pub fn anti_pattern_topic_for_path(path: &str) -> String {
 }
 
 pub fn anti_pattern_fact_for_path(path: &str) -> String {
-    format!(
-        "Never read {path} whole — use grep_search, file_summary, read_file_head/tail."
-    )
+    format!("Never read {path} whole — use grep_search, file_summary, read_file_head/tail.")
 }
 
 fn file_exploration_intent(lower: &str, open_files: &[String]) -> bool {
@@ -582,17 +587,19 @@ fn file_exploration_intent(lower: &str, open_files: &[String]) -> bool {
         return true;
     }
     [
-        "read", "file", "log", "grep", "cat", "find", "search", "debug", "error", "stack",
-        "trace", "dist", "artifact", "build",
+        "read", "file", "log", "grep", "cat", "find", "search", "debug", "error", "stack", "trace",
+        "dist", "artifact", "build",
     ]
     .iter()
     .any(|k| lower.contains(k))
 }
 
 fn grep_intent(lower: &str) -> bool {
-    ["grep", "find", "search", "where", "locate", "pattern", "string"]
-        .iter()
-        .any(|k| lower.contains(k))
+    [
+        "grep", "find", "search", "where", "locate", "pattern", "string",
+    ]
+    .iter()
+    .any(|k| lower.contains(k))
 }
 
 fn log_intent(lower: &str) -> bool {
@@ -657,13 +664,10 @@ pub fn run_token_tools_bench() -> Result<TokenToolsBenchReport> {
     } else {
         0.0
     };
-    scenarios.push(bench_scenario(
-        "grep_search",
-        "grep_search",
-        grep_savings,
-    ));
+    scenarios.push(bench_scenario("grep_search", "grep_search", grep_savings));
 
-    let avg_savings_pct = scenarios.iter().map(|s| s.savings_pct).sum::<f64>() / scenarios.len() as f64;
+    let avg_savings_pct =
+        scenarios.iter().map(|s| s.savings_pct).sum::<f64>() / scenarios.len() as f64;
     let passed = scenarios.iter().all(|s| s.passed);
 
     Ok(TokenToolsBenchReport {

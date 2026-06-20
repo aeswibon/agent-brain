@@ -24,9 +24,7 @@ pub struct TurnCache {
 impl TurnCache {
     pub fn new(capacity: usize, ttl_secs: u64) -> Self {
         Self {
-            inner: Mutex::new(LruCache::new(
-                NonZeroUsize::new(capacity.max(1)).unwrap(),
-            )),
+            inner: Mutex::new(LruCache::new(NonZeroUsize::new(capacity.max(1)).unwrap())),
             ttl: Duration::from_secs(ttl_secs),
         }
     }
@@ -99,9 +97,7 @@ pub struct QueryEmbeddingCache {
 impl QueryEmbeddingCache {
     pub fn new(capacity: usize) -> Self {
         Self {
-            inner: Mutex::new(LruCache::new(
-                NonZeroUsize::new(capacity.max(1)).unwrap(),
-            )),
+            inner: Mutex::new(LruCache::new(NonZeroUsize::new(capacity.max(1)).unwrap())),
         }
     }
 

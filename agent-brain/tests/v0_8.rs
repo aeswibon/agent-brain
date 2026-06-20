@@ -1,10 +1,10 @@
+use agent_brain::config::Config;
 use agent_brain::db::store::BrainStore;
 use agent_brain::settings::{AgentBrainSettings, UpstreamMcpSettings};
 use agent_brain::upstream::{
     resolve_env_value, secret_names_from_env, suggest_upstream_tools, truncate_upstream_result,
     IndexedUpstreamTool,
 };
-use agent_brain::config::Config;
 use std::collections::HashMap;
 use tempfile::TempDir;
 
@@ -21,7 +21,10 @@ fn test_config(home: &std::path::Path) -> Config {
 fn upstream_env_template_extracts_secret_names() {
     let mut env = HashMap::new();
     env.insert("TOKEN".into(), "${GITHUB_TOKEN}".into());
-    assert_eq!(secret_names_from_env(&env), vec!["GITHUB_TOKEN".to_string()]);
+    assert_eq!(
+        secret_names_from_env(&env),
+        vec!["GITHUB_TOKEN".to_string()]
+    );
 }
 
 #[test]
@@ -58,12 +61,7 @@ fn suggest_tools_from_indexed_catalog() {
         }],
         ..UpstreamMcpSettings::default()
     };
-    let suggested = suggest_upstream_tools(
-        &store,
-        &settings,
-        "search github issues in repo",
-        2,
-    );
+    let suggested = suggest_upstream_tools(&store, &settings, "search github issues in repo", 2);
     assert!(!suggested.is_empty());
     assert_eq!(suggested[0].server, "github");
 }

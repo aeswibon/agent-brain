@@ -49,7 +49,10 @@ pub fn git_status(home: &Path, settings: &GitSyncSettings) -> Result<GitSyncStat
         let raw = fs::read_to_string(bundle.join("manifest.json"))
             .context("read bundle manifest.json")?;
         let manifest: serde_json::Value = serde_json::from_str(&raw)?;
-        status.fact_count = manifest.get("fact_count").and_then(|v| v.as_u64()).map(|n| n as usize);
+        status.fact_count = manifest
+            .get("fact_count")
+            .and_then(|v| v.as_u64())
+            .map(|n| n as usize);
     }
 
     Ok(status)
@@ -134,7 +137,10 @@ pub fn git_push(store: &BrainStore, home: &Path, settings: &GitSyncSettings) -> 
 
     run_git(&root, &["add", BUNDLE_DIR_NAME])?;
     let stamp = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ");
-    let commit = run_git(&root, &["commit", "-m", &format!("agent-brain sync {stamp}")]);
+    let commit = run_git(
+        &root,
+        &["commit", "-m", &format!("agent-brain sync {stamp}")],
+    );
     if let Err(err) = &commit {
         let msg = err.to_string();
         if !msg.contains("nothing to commit") {
@@ -142,14 +148,14 @@ pub fn git_push(store: &BrainStore, home: &Path, settings: &GitSyncSettings) -> 
         }
     }
 
-    run_git(
-        &root,
-        &["push", "-u", "origin", settings.branch.as_str()],
-    )?;
+    run_git(&root, &["push", "-u", "origin", settings.branch.as_str()])?;
     Ok(())
 }
 
-pub fn git_pull(engine: &crate::engine::Engine, settings: &GitSyncSettings) -> Result<ImportReport> {
+pub fn git_pull(
+    engine: &crate::engine::Engine,
+    settings: &GitSyncSettings,
+) -> Result<ImportReport> {
     let home = &engine.config.home;
     let root = git_sync_root(home);
     if !root.join(".git").is_dir() {
@@ -246,10 +252,7 @@ mod tests {
     #[test]
     fn sync_paths_under_home() {
         let home = PathBuf::from("/tmp/brain-home");
-        assert_eq!(
-            git_sync_root(&home),
-            PathBuf::from("/tmp/brain-home/sync")
-        );
+        assert_eq!(git_sync_root(&home), PathBuf::from("/tmp/brain-home/sync"));
         assert_eq!(
             git_bundle_dir(&home),
             PathBuf::from("/tmp/brain-home/sync/bundle")
@@ -263,8 +266,12 @@ mod tests {
         }
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path();
-        init_git_repo(home, Some("git@github.com:example/agent-brain-sync.git"), "main")
-            .unwrap();
+        init_git_repo(
+            home,
+            Some("git@github.com:example/agent-brain-sync.git"),
+            "main",
+        )
+        .unwrap();
         assert!(git_sync_root(home).join(".git").is_dir());
         assert!(git_bundle_dir(home).is_dir());
         let status = git_status(home, &GitSyncSettings::default()).unwrap();

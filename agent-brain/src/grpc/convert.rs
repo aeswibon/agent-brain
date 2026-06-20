@@ -1,11 +1,12 @@
 use crate::grpc::pb::{
     AgentRec as PbAgentRec, ContextBundle as PbContextBundle, MemoryRec as PbMemoryRec,
     MustApply as PbMustApply, RouteLimits as PbRouteLimits, RouteTaskRequest, RouteTaskResponse,
-    RouteWarning as PbRouteWarning, RuleRec as PbRuleRec, SkillRec as PbSkillRec, TaskKind as PbTaskKind,
+    RouteWarning as PbRouteWarning, RuleRec as PbRuleRec, SkillRec as PbSkillRec,
+    TaskKind as PbTaskKind,
 };
 use crate::types::{
-    AgentRec, ContextBundle, MemoryRec, MustApply, RouteLimits, RouteTaskResponse as RustRouteResponse,
-    RouteWarning, RuleRec, SkillRec, TaskKind,
+    AgentRec, ContextBundle, MemoryRec, MustApply, RouteLimits,
+    RouteTaskResponse as RustRouteResponse, RouteWarning, RuleRec, SkillRec, TaskKind,
 };
 
 pub fn task_kind_to_proto(kind: TaskKind) -> i32 {
@@ -69,11 +70,31 @@ pub fn route_response_to_proto(resp: RustRouteResponse) -> RouteTaskResponse {
         .map(task_kind_to_proto)
         .unwrap_or(PbTaskKind::Unspecified as i32);
     RouteTaskResponse {
-        recommended_agents: resp.recommended_agents.into_iter().map(agent_to_proto).collect(),
-        recommended_skills: resp.recommended_skills.into_iter().map(skill_to_proto).collect(),
-        applicable_rules: resp.applicable_rules.into_iter().map(rule_to_proto).collect(),
-        relevant_memory: resp.relevant_memory.into_iter().map(memory_to_proto).collect(),
-        must_apply: resp.must_apply.into_iter().map(must_apply_to_proto).collect(),
+        recommended_agents: resp
+            .recommended_agents
+            .into_iter()
+            .map(agent_to_proto)
+            .collect(),
+        recommended_skills: resp
+            .recommended_skills
+            .into_iter()
+            .map(skill_to_proto)
+            .collect(),
+        applicable_rules: resp
+            .applicable_rules
+            .into_iter()
+            .map(rule_to_proto)
+            .collect(),
+        relevant_memory: resp
+            .relevant_memory
+            .into_iter()
+            .map(memory_to_proto)
+            .collect(),
+        must_apply: resp
+            .must_apply
+            .into_iter()
+            .map(must_apply_to_proto)
+            .collect(),
         warnings: resp.warnings.into_iter().map(warning_to_proto).collect(),
         recommended_phase: resp.recommended_phase,
         tokens_used: resp.tokens_used as u32,
@@ -142,9 +163,17 @@ fn warning_to_proto(rec: RouteWarning) -> PbRouteWarning {
 fn bundle_to_proto(bundle: ContextBundle) -> PbContextBundle {
     PbContextBundle {
         team_rules: bundle.team_rules.into_iter().map(rule_to_proto).collect(),
-        negative_memory: bundle.negative_memory.into_iter().map(memory_to_proto).collect(),
+        negative_memory: bundle
+            .negative_memory
+            .into_iter()
+            .map(memory_to_proto)
+            .collect(),
         skill_docs: bundle.skill_docs.into_iter().map(skill_to_proto).collect(),
         agents: bundle.agents.into_iter().map(agent_to_proto).collect(),
-        observations: bundle.observations.into_iter().map(memory_to_proto).collect(),
+        observations: bundle
+            .observations
+            .into_iter()
+            .map(memory_to_proto)
+            .collect(),
     }
 }

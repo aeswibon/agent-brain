@@ -180,7 +180,9 @@ pub fn format_text(stats: &OperatorStats) -> String {
             stats.period.avg_routed_tokens
         ));
     } else {
-        out.push_str("- Token savings: no routes logged yet (send an agent turn with route_task)\n");
+        out.push_str(
+            "- Token savings: no routes logged yet (send an agent turn with route_task)\n",
+        );
     }
     if stats.period.routes_with_constraints > 0 {
         out.push_str(&format!(

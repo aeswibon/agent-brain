@@ -157,13 +157,8 @@ impl WriteHandlerCtx {
         policy: MergePolicy,
         source: SyncSource,
     ) -> Result<ImportReport> {
-        let report = crate::sync::import_bundle(
-            &self.store,
-            &self.embedder,
-            &bundle_path,
-            policy,
-            source,
-        )?;
+        let report =
+            crate::sync::import_bundle(&self.store, &self.embedder, &bundle_path, policy, source)?;
         self.cache.clear();
         self.store.bump_index_version().ok();
         Ok(report)

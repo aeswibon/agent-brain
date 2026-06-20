@@ -35,7 +35,10 @@ pub fn print_onboarding(home: &Path, has_briefing: bool) {
     if let Ok(config) = crate::config::Config::load() {
         if let Ok(store) = crate::db::store::BrainStore::open(&config.db_path) {
             if let Ok(stats) = crate::stats::collect(&store, &config, 7) {
-                println!("Metrics (7d):     {}", crate::stats::format_summary_line(&stats));
+                println!(
+                    "Metrics (7d):     {}",
+                    crate::stats::format_summary_line(&stats)
+                );
             }
         }
     }

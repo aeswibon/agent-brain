@@ -62,10 +62,9 @@ pub fn lookup_alias(input: &str) -> Result<Option<ResolvedAlias>> {
             bail!("empty package alias; use @starter, @supervisor, @nextjs, @ecc, or owner/repo");
         }
         let reg = load_curated_registry()?;
-        let entry = reg
-            .aliases
-            .get(alias)
-            .with_context(|| format!("unknown package alias '@{alias}'. Run: agent-brain registry list"))?;
+        let entry = reg.aliases.get(alias).with_context(|| {
+            format!("unknown package alias '@{alias}'. Run: agent-brain registry list")
+        })?;
         if let Some(bundle) = &entry.bundle {
             return Ok(Some(ResolvedAlias::Bundle(bundle.clone())));
         }

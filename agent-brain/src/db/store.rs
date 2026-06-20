@@ -11,7 +11,7 @@ use uuid::Uuid;
 use crate::ann::AnnIndex;
 use crate::db::migrations;
 use crate::embed::{batch_dot_products, normalize_embedding};
-use crate::intelligence::{parse_apply_when, MatchContext, matches_apply_when};
+use crate::intelligence::{matches_apply_when, parse_apply_when, MatchContext};
 use crate::types::{ItemType, ScoredItem};
 
 const BM25_ITEMS_TOP: usize = 150;
@@ -600,7 +600,9 @@ impl BrainStore {
             let mut stmt =
                 conn.prepare("SELECT item_type, COUNT(*) FROM indexed_items GROUP BY item_type")?;
             let rows = stmt
-                .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? as usize)))?
+                .query_map([], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? as usize))
+                })?
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(rows)
         })
@@ -855,10 +857,7 @@ impl BrainStore {
                     continue;
                 }
                 let latest_fact = rows[0].0.clone();
-                let negative_count = rows
-                    .iter()
-                    .filter(|(_, pol, _)| pol == "negative")
-                    .count();
+                let negative_count = rows.iter().filter(|(_, pol, _)| pol == "negative").count();
                 let mut tag_set = std::collections::HashSet::new();
                 for (_, _, apply_when) in &rows {
                     for tag in parse_apply_when(apply_when.as_deref()) {
@@ -1947,8 +1946,12 @@ impl BrainStore {
     }
 
     pub(crate) fn bm25_prefilter(&self, query: &str) -> Result<Bm25Prefilter> {
-        let item_bm25 = self.bm25_search_items(query, BM25_ITEMS_TOP).unwrap_or_default();
-        let fact_bm25 = self.bm25_search_facts(query, BM25_FACTS_TOP).unwrap_or_default();
+        let item_bm25 = self
+            .bm25_search_items(query, BM25_ITEMS_TOP)
+            .unwrap_or_default();
+        let fact_bm25 = self
+            .bm25_search_facts(query, BM25_FACTS_TOP)
+            .unwrap_or_default();
 
         let mut bm25_map = HashMap::new();
         let mut bm25_max = 0.0f64;
@@ -2000,11 +2003,9 @@ impl BrainStore {
                     let filter = repo_root.map(|root| crate::ann::AnnFilter {
                         repo_root: Some(root),
                     });
-                    for (id, _) in ann.top_k_filtered(
-                        query_embedding,
-                        ann_settings.top_k,
-                        filter.as_ref(),
-                    ) {
+                    for (id, _) in
+                        ann.top_k_filtered(query_embedding, ann_settings.top_k, filter.as_ref())
+                    {
                         if candidate_ids.insert(id.clone()) {
                             if let Some(&idx) = snapshot.indexed_by_id.get(&id) {
                                 candidates.push(&snapshot.indexed[idx]);
@@ -2076,8 +2077,7 @@ impl BrainStore {
         let mut scored = Vec::with_capacity(candidate_count);
         for (row, cosine_sim) in candidates.into_iter().zip(cosine_sims) {
             let item_type = ItemType::parse(&row.item_type).unwrap_or(ItemType::Rule);
-            let lexical =
-                crate::retrieval::lexical_overlap_score(query, &row.topic, &row.text);
+            let lexical = crate::retrieval::lexical_overlap_score(query, &row.topic, &row.text);
             let entity = crate::retrieval::entity_overlap_score(query, &row.topic, &row.text);
 
             let bm25_norm = bm25
@@ -2122,9 +2122,7 @@ impl BrainStore {
             }
 
             for tag in tags {
-                if row.topic.to_lowercase().contains(tag)
-                    || row.text.to_lowercase().contains(tag)
-                {
+                if row.topic.to_lowercase().contains(tag) || row.text.to_lowercase().contains(tag) {
                     score += 0.15;
                     break;
                 }
@@ -2209,7 +2207,11 @@ impl BrainStore {
             });
         }
 
-        scored.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        scored.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         Ok((scored, candidate_count, index_total))
     }
 
@@ -2241,7 +2243,10 @@ impl BrainStore {
     }
 }
 
-fn memory_fact_meta<'a>(snapshot: &'a SearchIndexCache, row: &'a CachedRow) -> Option<&'a CachedRow> {
+fn memory_fact_meta<'a>(
+    snapshot: &'a SearchIndexCache,
+    row: &'a CachedRow,
+) -> Option<&'a CachedRow> {
     snapshot.memories.iter().find(|m| {
         m.topic == row.topic
             && m.text == row.text
@@ -2308,9 +2313,7 @@ mod tests {
             bm25_max: 1.0,
         };
         assert!(!weak.fast_path_eligible("unrelated query"));
-        assert!(!weak.fast_path_eligible(
-            "grep before cat large log token efficient"
-        ));
+        assert!(!weak.fast_path_eligible("grep before cat large log token efficient"));
 
         let strong = Bm25Prefilter {
             item_ids: HashSet::from(["a".into()]),
@@ -2326,9 +2329,7 @@ mod tests {
             bm25_map: HashMap::from([("a".into(), -2.0)]),
             bm25_max: 2.0,
         };
-        assert!(supervisor_medium.fast_path_eligible(
-            "grep before cat large log token efficient"
-        ));
+        assert!(supervisor_medium.fast_path_eligible("grep before cat large log token efficient"));
     }
 
     #[test]
@@ -2513,15 +2514,9 @@ fn map_retrieval_log_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<RetrievalL
         truncated: row.get::<_, i64>(5)? != 0,
         cache_hit: row.get::<_, i64>(6)? != 0,
         latency_ms: row.get::<_, i64>(7)? as u64,
-        index_total: row
-            .get::<_, Option<i64>>(8)?
-            .map(|n| n.max(0) as usize),
-        saved_pct: row
-            .get::<_, Option<i64>>(9)?
-            .map(|n| n.clamp(0, 100) as u8),
-        must_apply_count: row
-            .get::<_, Option<i64>>(10)?
-            .map(|n| n.max(0) as usize),
+        index_total: row.get::<_, Option<i64>>(8)?.map(|n| n.max(0) as usize),
+        saved_pct: row.get::<_, Option<i64>>(9)?.map(|n| n.clamp(0, 100) as u8),
+        must_apply_count: row.get::<_, Option<i64>>(10)?.map(|n| n.max(0) as usize),
     })
 }
 
@@ -2536,7 +2531,15 @@ fn phase_match_boost(phase: &str, topic: &str, text: &str) -> f64 {
     let keywords: &[&str] = match phase {
         "debugging" => &["debug", "fix", "error", "bug", "fail", "crash", "issue"],
         "planning" => &["plan", "design", "architect", "roadmap", "spec", "version"],
-        "implementing" => &["implement", "build", "add", "create", "release", "sync", "mcp"],
+        "implementing" => &[
+            "implement",
+            "build",
+            "add",
+            "create",
+            "release",
+            "sync",
+            "mcp",
+        ],
         "reviewing" => &["review", "pr", "audit", "lint", "checklist"],
         _ => return 0.0,
     };
@@ -2597,7 +2600,10 @@ pub fn looks_like_secret(text: &str) -> bool {
         r"ghp_[a-zA-Z0-9]{20,}",
         r"-----BEGIN (RSA |EC )?PRIVATE KEY-----",
     ];
-    patterns.iter().any(|p| regex::Regex::new(p).map(|re| re.is_match(text)).unwrap_or(false))
-        || text.contains(".env")
+    patterns.iter().any(|p| {
+        regex::Regex::new(p)
+            .map(|re| re.is_match(text))
+            .unwrap_or(false)
+    }) || text.contains(".env")
         || text.contains(".pem")
 }

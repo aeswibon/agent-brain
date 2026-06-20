@@ -7,21 +7,21 @@ use std::time::{Duration, Instant};
 use anyhow::Result;
 use uuid::Uuid;
 
-use crate::cache::{route_cache_key, fingerprint_query, QueryEmbeddingCache, TurnCache};
+use crate::cache::{fingerprint_query, route_cache_key, QueryEmbeddingCache, TurnCache};
 use crate::config::Config;
 use crate::db::store::{content_hash, BrainStore};
 use crate::db::{send_and_recv, spawn_write_handler, WriteOp, WriteQueue};
 use crate::db::{RouteLatencyStats, RouteTiming};
 use crate::embed::{parse_embedding_model, Embedder};
 use crate::index;
+use crate::mcp_activity::McpActivity;
+use crate::route_briefing;
+use crate::sync::{ImportReport, MergePolicy, SyncSource};
 use crate::tokens::estimate_json_tokens;
 use crate::types::{
     AgentRec, GetContextItem, GetContextResponse, ItemType, MemoryRec, MustApply, RouteLimits,
     RouteTaskResponse, RuleRec, ScoredItem, SkillRec,
 };
-use crate::mcp_activity::McpActivity;
-use crate::route_briefing;
-use crate::sync::{ImportReport, MergePolicy, SyncSource};
 use crate::workspace::{agent_boost_keywords, infer_phase, is_low_signal_memory, probe};
 
 type RouteQueryParallelResult = (Vec<ScoredItem>, usize, usize, u64, u64, bool, bool);
@@ -133,11 +133,8 @@ impl Engine {
     pub fn bootstrap(self: &Arc<Self>, cwd: Option<&Path>) -> Result<usize> {
         let mut n = index::sync_index(&self.store, &self.config, &self.embedder, cwd)?;
         if self.config.session_ingest_enabled && !self.config.session_ingest_background {
-            let sessions = crate::sessions::ingest_sessions(
-                &self.store,
-                &self.embedder,
-                &self.config,
-            )?;
+            let sessions =
+                crate::sessions::ingest_sessions(&self.store, &self.embedder, &self.config)?;
             if sessions > 0 {
                 tracing::info!("session ingest: imported {sessions} session facts");
                 self.store.bump_index_version()?;
@@ -151,8 +148,10 @@ impl Engine {
         }
         let settings = crate::settings::AgentBrainSettings::load(&self.config.home);
         if settings.upstream_mcp.enabled {
-            match crate::upstream::refresh_upstream_index_blocking(&settings.upstream_mcp, &self.store)
-            {
+            match crate::upstream::refresh_upstream_index_blocking(
+                &settings.upstream_mcp,
+                &self.store,
+            ) {
                 Ok(count) if count > 0 => {
                     tracing::info!(count, "upstream MCP tools indexed");
                 }
@@ -235,8 +234,7 @@ impl Engine {
         if !self.config.session_ingest_enabled {
             return Ok(0);
         }
-        let sessions =
-            crate::sessions::ingest_sessions(&self.store, &self.embedder, &self.config)?;
+        let sessions = crate::sessions::ingest_sessions(&self.store, &self.embedder, &self.config)?;
         if sessions > 0 {
             self.store.bump_index_version()?;
         }
@@ -333,7 +331,9 @@ impl Engine {
             }
             let cwd_ref = cwd.as_deref();
             match engine.bootstrap(cwd_ref) {
-                Ok(n) => tracing::info!(target: "agent_brain::bootstrap", items = n, "bootstrap complete"),
+                Ok(n) => {
+                    tracing::info!(target: "agent_brain::bootstrap", items = n, "bootstrap complete")
+                }
                 Err(err) => tracing::warn!(error = %err, "background bootstrap failed"),
             }
             if engine.config.session_ingest_enabled && engine.config.session_ingest_background {
@@ -553,9 +553,14 @@ impl Engine {
                 );
             }
         }
-        let topics: Vec<String> = resp.relevant_memory.iter().map(|m| m.topic.clone()).collect();
+        let topics: Vec<String> = resp
+            .relevant_memory
+            .iter()
+            .map(|m| m.topic.clone())
+            .collect();
         for (topic, message) in self.store.scope_conflict_warnings(&topics)? {
-            resp.warnings.push(crate::types::RouteWarning { topic, message });
+            resp.warnings
+                .push(crate::types::RouteWarning { topic, message });
         }
         let build_us = build_started.elapsed().as_micros() as u64;
 
@@ -835,10 +840,7 @@ fn try_add_route_item(
             }
             if let Some(constraint) = must_apply_for_memory(item) {
                 if resp.must_apply.len() < 3
-                    && !resp
-                        .must_apply
-                        .iter()
-                        .any(|m| m.topic == constraint.topic)
+                    && !resp.must_apply.iter().any(|m| m.topic == constraint.topic)
                 {
                     resp.must_apply.push(constraint);
                 }

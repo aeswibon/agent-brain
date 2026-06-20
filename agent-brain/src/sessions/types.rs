@@ -94,7 +94,10 @@ mod tests {
     fn slug_is_stable_and_short() {
         let a = short_session_slug("c1db6ad4-223d-4e9b-b281-c505a68c6eee");
         assert_eq!(a.len(), 12);
-        assert_eq!(a, short_session_slug("c1db6ad4-223d-4e9b-b281-c505a68c6eee"));
+        assert_eq!(
+            a,
+            short_session_slug("c1db6ad4-223d-4e9b-b281-c505a68c6eee")
+        );
     }
 
     #[test]

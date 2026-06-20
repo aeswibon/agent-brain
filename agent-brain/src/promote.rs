@@ -62,7 +62,10 @@ pub fn promote_fact_to_skill(
     })
 }
 
-pub fn list_staging(store: &BrainStore, status: Option<&str>) -> Result<Vec<crate::db::store::SkillStagingRow>> {
+pub fn list_staging(
+    store: &BrainStore,
+    status: Option<&str>,
+) -> Result<Vec<crate::db::store::SkillStagingRow>> {
     store.list_skill_staging(status)
 }
 
@@ -120,7 +123,9 @@ fn resolve_fact(
             .ok()
             .and_then(|c| find_repo_root(&c))
             .map(|p| p.display().to_string());
-        if let Some(snap) = store.get_active_fact_by_topic(topic, "project", scope_key.as_deref())? {
+        if let Some(snap) =
+            store.get_active_fact_by_topic(topic, "project", scope_key.as_deref())?
+        {
             return store
                 .get_fact(&snap.id)?
                 .with_context(|| format!("fact not found: {}", snap.id));
@@ -135,7 +140,11 @@ fn resolve_fact(
     bail!("promote requires fact_id or topic");
 }
 
-fn resolve_skill_target(scope: &str, scope_key: Option<&str>, skill_name: &str) -> Result<Option<String>> {
+fn resolve_skill_target(
+    scope: &str,
+    scope_key: Option<&str>,
+    skill_name: &str,
+) -> Result<Option<String>> {
     if scope == "global" {
         let home = dirs::home_dir().context("home directory")?;
         return Ok(Some(
