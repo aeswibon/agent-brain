@@ -847,9 +847,65 @@ async fn main() -> Result<()> {
                     let stats = agent_brain::dataset::compute_stats(&entries);
                     println!("{}", serde_json::to_string_pretty(&stats)?);
                 }
+                "ingest-spine" => {
+                    let only_successful = !args.iter().any(|a| a == "--all-outcomes");
+                    let out = flag_value(&args, "--out")
+                        .map(std::path::PathBuf::from)
+                        .unwrap_or_else(agent_brain::spine_ingest::default_dataset_path);
+                    let executions =
+                        flag_value(&args, "--executions-dir").map(std::path::PathBuf::from);
+                    let report = agent_brain::spine_ingest::ingest_executions(
+                        executions.as_deref(),
+                        &out,
+                        only_successful,
+                    )?;
+                    println!("{}", serde_json::to_string_pretty(&report)?);
+                }
+                "pipeline" => {
+                    let only_successful = !args.iter().any(|a| a == "--all-outcomes");
+                    let out = flag_value(&args, "--out")
+                        .map(std::path::PathBuf::from)
+                        .unwrap_or_else(agent_brain::spine_ingest::default_dataset_path);
+                    let spine_report =
+                        agent_brain::spine_ingest::ingest_executions(None, &out, only_successful)?;
+                    let min_confidence = flag_value(&args, "--min-confidence")
+                        .and_then(|v| v.parse::<f64>().ok())
+                        .unwrap_or(0.8);
+                    let traj_entries = agent_brain::dataset::export_dataset(
+                        &store,
+                        min_confidence,
+                        only_successful,
+                    )?;
+                    let traj_path = out.with_extension("trajectories.jsonl");
+                    {
+                        let file = std::fs::File::create(&traj_path)?;
+                        let mut writer = std::io::BufWriter::new(file);
+                        for entry in &traj_entries {
+                            let line = serde_json::to_string(entry)?;
+                            writeln!(writer, "{line}")?;
+                        }
+                        writer.flush()?;
+                    }
+                    let merged_path = out.with_extension("merged.jsonl");
+                    let merged = agent_brain::spine_ingest::merge_jsonl_files(
+                        &[out.clone(), traj_path],
+                        &merged_path,
+                    )?;
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "spine_ingest": spine_report,
+                            "trajectory_entries": traj_entries.len(),
+                            "merged_entries": merged,
+                            "merged_path": merged_path,
+                        }))?
+                    );
+                }
                 _ => {
                     eprintln!("Usage: agent-brain dataset export [--out PATH] [--min-confidence N] [--all-outcomes]");
                     eprintln!("       agent-brain dataset stats [--min-confidence N]");
+                    eprintln!("       agent-brain dataset ingest-spine [--out PATH] [--executions-dir DIR] [--all-outcomes]");
+                    eprintln!("       agent-brain dataset pipeline [--out PATH] [--min-confidence N] [--all-outcomes]");
                     std::process::exit(1);
                 }
             }

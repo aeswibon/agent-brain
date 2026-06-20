@@ -48,6 +48,7 @@ pub mod serve_meta;
 pub mod sessions;
 pub mod settings;
 pub mod skills_sh;
+pub mod spine_ingest;
 pub mod stats;
 pub mod suggest_memory;
 pub mod supervisor_bench;

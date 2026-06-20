@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.0] - 2026-06-20
+
+### Added
+
+- **Spine trajectory ingest** — `dataset ingest-spine` reads `~/.autonomic/logs/spine/executions/*.json` into JSONL
+- **Dataset pipeline** — `dataset pipeline` merges spine graphs with SQLite trajectories for LoRA training
+
 ## [0.27.0] - 2026-06-20
 
 ### Added
