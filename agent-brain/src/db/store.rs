@@ -127,6 +127,7 @@ impl BrainStore {
             std::fs::create_dir_all(parent)?;
         }
         let conn = Connection::open(db_path).context("open brain.db")?;
+        crate::db::at_rest::apply_encryption_key(&conn)?;
         migrations::run(&conn).context("run migrations")?;
         let index_version = conn
             .query_row(
@@ -2036,6 +2037,25 @@ impl BrainStore {
         })
     }
 
+    fn load_useful_counts(&self, ids: &[String]) -> Result<HashMap<String, u32>> {
+        if ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        self.with_conn(|conn| {
+            let mut map = HashMap::new();
+            for id in ids {
+                if let Ok(count) = conn.query_row(
+                    "SELECT useful_count FROM context_weights WHERE item_id = ?1",
+                    params![id],
+                    |r| r.get::<_, u32>(0),
+                ) {
+                    map.insert(id.clone(), count);
+                }
+            }
+            Ok(map)
+        })
+    }
+
     pub(crate) fn bm25_prefilter(&self, query: &str) -> Result<Bm25Prefilter> {
         let item_bm25 = self
             .bm25_search_items(query, BM25_ITEMS_TOP)
@@ -2154,6 +2174,8 @@ impl BrainStore {
         let candidate_count = candidates.len();
         let candidate_ids: Vec<String> = candidates.iter().map(|r| r.id.clone()).collect();
         let context_weights = self.load_context_weights(&candidate_ids)?;
+        let useful_counts = self.load_useful_counts(&candidate_ids)?;
+        let now_ms = chrono::Utc::now().timestamp_millis();
 
         let cosine_sims: Vec<f64> = if bm25_only || query_embedding.is_empty() {
             vec![0.0; candidate_count]
@@ -2262,6 +2284,14 @@ impl BrainStore {
                         score *= 0.85;
                     }
                 }
+
+                let useful = useful_counts.get(&row.id).copied().unwrap_or(0);
+                score *= crate::memory_decay::ebbinghaus_multiplier(
+                    row.updated_at,
+                    confidence,
+                    useful,
+                    now_ms,
+                );
 
                 scored.push(ScoredItem {
                     id: row.id.clone(),

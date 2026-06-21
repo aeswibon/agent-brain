@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.28.5] - 2026-06-21
+
+### Added
+
+- **Ebbinghaus memory decay** — temporal weight decay in retrieval scoring using age, confidence, and `context_weights.useful_count`
+- **Encryption at rest** — SQLCipher support via `AGENT_BRAIN_ENCRYPT_DB=1`; master key stored in OS keychain (`AGENT_BRAIN_DB_MASTER_KEY`)
+
 ## [0.28.4] - 2026-06-21
 
 ### Added

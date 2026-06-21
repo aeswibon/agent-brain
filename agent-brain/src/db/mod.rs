@@ -1,3 +1,4 @@
+pub mod at_rest;
 pub mod latency;
 pub mod migrations;
 pub mod store;
