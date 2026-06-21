@@ -26,6 +26,7 @@ pub(crate) struct IndexBatchItem {
     pub scope_key: Option<String>,
     pub content_hash: String,
     pub embedding: Vec<f32>,
+    pub file_mtime: Option<i64>,
 }
 
 const BM25_ITEMS_TOP: usize = 150;
@@ -309,6 +310,35 @@ impl BrainStore {
         })
     }
 
+    pub fn indexed_item_mtime(&self, source_path: &str) -> Result<Option<i64>> {
+        self.with_conn(|conn| {
+            conn.query_row(
+                "SELECT file_mtime FROM indexed_items WHERE source_path = ?1 AND file_mtime IS NOT NULL LIMIT 1",
+                params![source_path],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(Into::into)
+        })
+    }
+
+    pub fn get_all_indexed_mtimes(&self) -> Result<std::collections::HashMap<String, i64>> {
+        self.with_conn(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT source_path, file_mtime FROM indexed_items WHERE file_mtime IS NOT NULL"
+            )?;
+            let rows = stmt.query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+            })?;
+            let mut map = std::collections::HashMap::new();
+            for row in rows {
+                let (path, mtime) = row?;
+                map.insert(path, mtime);
+            }
+            Ok(map)
+        })
+    }
+
     pub fn upsert_indexed_item(
         &self,
         item_type: ItemType,
@@ -376,10 +406,10 @@ impl BrainStore {
                     params![item.source_path, item.content_hash],
                 )?;
                 conn.execute(
-                    r#"INSERT INTO indexed_items (id, item_type, topic, text, source_path, scope, scope_key, content_hash, embedding, updated_at)
-                       VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)
+                    r#"INSERT INTO indexed_items (id, item_type, topic, text, source_path, scope, scope_key, content_hash, embedding, updated_at, file_mtime)
+                       VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)
                        ON CONFLICT(source_path, content_hash) DO UPDATE SET
-                         topic=excluded.topic, text=excluded.text, embedding=excluded.embedding, updated_at=excluded.updated_at"#,
+                         topic=excluded.topic, text=excluded.text, embedding=excluded.embedding, updated_at=excluded.updated_at, file_mtime=excluded.file_mtime"#,
                     params![
                         item.id,
                         item.item_type.as_str(),
@@ -390,11 +420,23 @@ impl BrainStore {
                         item.scope_key,
                         item.content_hash,
                         blob,
-                        now
+                        now,
+                        item.file_mtime,
                     ],
                 )?;
             }
             conn.execute_batch("COMMIT")?;
+            Ok(())
+        })
+    }
+
+    pub fn set_indexed_item_mtime(&self, source_path: &str, mtime: i64) -> Result<()> {
+        self.with_conn(|conn| {
+            conn.execute(
+                "UPDATE indexed_items SET file_mtime = ?1 WHERE source_path = ?2",
+                params![mtime, source_path],
+            )
+            .ok();
             Ok(())
         })
     }

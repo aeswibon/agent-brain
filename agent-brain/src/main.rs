@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use agent_brain::{
-    auto_update, config::Config, doctor, engine::Engine, grpc, host_install, install, mcp,
+    auto_update, config::Config, doctor, engine::Engine, grpc, host_install, index, install, mcp,
     packages, serve_meta, settings,
 };
 use anyhow::{Context, Result};
@@ -68,12 +68,21 @@ async fn main() -> Result<()> {
             grpc::serve(engine, addr).await?;
         }
         "index" => {
+            let changed_only = args.iter().any(|a| a == "--changed-only" || a == "-c");
+            let no_ast = args.iter().any(|a| a == "--no-ast");
             let mut config = Config::load()?;
             config.bootstrap_background = false;
             config.session_ingest_background = false;
             config.bootstrap_interval_secs = 0;
             let engine = Arc::new(Engine::new(config)?);
-            let n = engine.bootstrap(None)?;
+            let n = index::sync_index_opts(
+                &engine.store,
+                &engine.config,
+                &engine.embedder,
+                None,
+                changed_only,
+                !no_ast,
+            )?;
             println!("Indexed {n} items");
         }
         "add" => {
@@ -1425,7 +1434,7 @@ fn print_usage() {
 Usage:
   agent-brain serve                         Start MCP server (stdio)
   agent-brain grpc serve [--addr HOST:PORT] Orchestrator bridge API (gRPC, default 127.0.0.1:7842)
-  agent-brain index                         Reindex local agents/skills/rules/memory
+  agent-brain index [--changed-only|-c] [--no-ast]   Reindex (--changed-only: skip files with unchanged mtime; --no-ast: skip AST symbol extraction)
   agent-brain add <@alias|owner/repo|url>   Install package(s) and index
   agent-brain add @supervisor               Execution supervisor pack (token-efficient ops)
   agent-brain add @starter                  Curated onboarding pack

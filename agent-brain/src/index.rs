@@ -21,8 +21,26 @@ pub fn sync_index(
     embedder: &Embedder,
     cwd: Option<&Path>,
 ) -> Result<usize> {
+    sync_index_opts(store, config, embedder, cwd, false, true)
+}
+
+pub fn sync_index_opts(
+    store: &BrainStore,
+    config: &Config,
+    embedder: &Embedder,
+    cwd: Option<&Path>,
+    changed_only: bool,
+    enable_ast_index: bool,
+) -> Result<usize> {
     let roots = config.default_index_roots(cwd);
     let mut batch: Vec<UnembeddedItem> = Vec::new();
+
+    // Pre-load known mtimes for mtime-based skip
+    let known_mtimes = if changed_only {
+        store.get_all_indexed_mtimes()?
+    } else {
+        std::collections::HashMap::new()
+    };
 
     // Phase 1: walk files, parse, hash-check, collect changed items
     let mut file_tasks = Vec::new();
@@ -44,37 +62,63 @@ pub fn sync_index(
             if should_skip(path) {
                 continue;
             }
+            // Mtime skip: if file mtime matches stored mtime, skip entirely
+            if changed_only {
+                if let Ok(metadata) = std::fs::metadata(path) {
+                    if let Ok(modified) = metadata.modified() {
+                        let mtime = modified
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map(|d| d.as_secs() as i64)
+                            .unwrap_or(0);
+                        if known_mtimes.get(path.to_str().unwrap_or("")) == Some(&mtime) {
+                            continue;
+                        }
+                    }
+                }
+            }
             let repo = cwd.and_then(crate::config::find_repo_root);
             file_tasks.push((path.to_path_buf(), repo, pkg_ctx.clone()));
         }
     }
+
+    // Compute mtimes for new items before the parallel section
+    let file_mtime_of = |path: &Path| -> Option<i64> {
+        std::fs::metadata(path)
+            .ok()
+            .and_then(|m| m.modified().ok())
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs() as i64)
+    };
 
     use rayon::prelude::*;
     let parsed_items: Vec<UnembeddedItem> = file_tasks
         .into_par_iter()
         .flat_map(|(path, repo, pkg_ctx)| {
             let mut items = Vec::new();
+            let mtime = file_mtime_of(&path);
             if let Some(item) = parse_file(&path, repo.as_deref(), pkg_ctx) {
                 let hash = content_hash(&item.text);
-                items.push(UnembeddedItem { item, hash });
+                items.push(UnembeddedItem { item, hash, mtime });
             }
-            if let Ok(ast_symbols) = crate::ast_indexer::index_file(&path) {
-                for symbol in &ast_symbols {
-                    let text = format!(
-                        "{} {} {} {}",
-                        symbol.symbol_name, symbol.symbol_kind, symbol.language, symbol.content
-                    );
-                    let hash = content_hash(&text);
-                    let source_path = symbol.file_path.clone();
-                    let item = ParsedItem {
-                        item_type: ItemType::Skill,
-                        topic: format!("{}/{}", symbol.language, symbol.symbol_name),
-                        text: text.chars().take(800).collect(),
-                        source_path,
-                        scope: "project".into(),
-                        scope_key: path.to_str().map(|s| s.to_string()),
-                    };
-                    items.push(UnembeddedItem { item, hash });
+            if enable_ast_index {
+                if let Ok(ast_symbols) = crate::ast_indexer::index_file(&path) {
+                    for symbol in &ast_symbols {
+                        let text = format!(
+                            "{} {} {} {}",
+                            symbol.symbol_name, symbol.symbol_kind, symbol.language, symbol.content
+                        );
+                        let hash = content_hash(&text);
+                        let source_path = symbol.file_path.clone();
+                        let item = ParsedItem {
+                            item_type: ItemType::Skill,
+                            topic: format!("{}/{}", symbol.language, symbol.symbol_name),
+                            text: text.chars().take(800).collect(),
+                            source_path,
+                            scope: "project".into(),
+                            scope_key: path.to_str().map(|s| s.to_string()),
+                        };
+                        items.push(UnembeddedItem { item, hash, mtime });
+                    }
                 }
             }
             items
@@ -88,6 +132,11 @@ pub fn sync_index(
             != Some(unemb.hash.as_str())
         {
             batch.push(unemb);
+        } else if changed_only {
+            // Update mtime even for unchanged items so we know they were checked
+            if let Some(mtime) = unemb.mtime {
+                store.set_indexed_item_mtime(&unemb.item.source_path, mtime)?;
+            }
         }
     }
 
@@ -98,8 +147,18 @@ pub fn sync_index(
         let source_path = path.display().to_string();
         let hash = content_hash(&serde_json::to_string(wf).unwrap_or_default());
         if store.indexed_item_current_hash(&source_path)?.as_deref() == Some(hash.as_str()) {
+            if changed_only {
+                if let Ok(m) = std::fs::metadata(path) {
+                    if let Ok(t) = m.modified() {
+                        if let Ok(d) = t.duration_since(std::time::UNIX_EPOCH) {
+                            store.set_indexed_item_mtime(&source_path, d.as_secs() as i64)?;
+                        }
+                    }
+                }
+            }
             continue;
         }
+        let mtime = file_mtime_of(path);
         let text = serde_json::to_string_pretty(wf).unwrap_or_default();
         let item = ParsedItem {
             item_type: ItemType::Workflow,
@@ -109,7 +168,7 @@ pub fn sync_index(
             scope: "global".into(),
             scope_key: None,
         };
-        batch.push(UnembeddedItem { item, hash });
+        batch.push(UnembeddedItem { item, hash, mtime });
     }
 
     if batch.is_empty() {
@@ -136,6 +195,7 @@ pub fn sync_index(
                 scope_key: ub.item.scope_key.clone(),
                 content_hash: ub.hash.clone(),
                 embedding,
+                file_mtime: ub.mtime,
             });
         }
     }
@@ -151,6 +211,7 @@ pub fn sync_index(
 struct UnembeddedItem {
     item: ParsedItem,
     hash: String,
+    mtime: Option<i64>,
 }
 
 fn should_skip(path: &Path) -> bool {
@@ -166,6 +227,17 @@ fn should_skip(path: &Path) -> bool {
         || s.contains("/.pytest_cache/")
         || s.contains("/dist/")
         || s.contains("/build/")
+        || s.contains("/__pycache__/")
+        || s.contains("/.next/")
+        || s.contains("/.cache/")
+        || s.contains("/vendor/")
+        || s.ends_with(".pyc")
+        || s.ends_with(".pyo")
+        || s.ends_with(".so")
+        || s.ends_with(".dylib")
+        || s.ends_with(".dll")
+        || s.ends_with(".exe")
+        || s.ends_with(".bin")
 }
 
 struct ParsedItem {

@@ -233,6 +233,24 @@ pub fn run(conn: &Connection) -> rusqlite::Result<()> {
         conn.execute("UPDATE schema_version SET version = 13", [])?;
     }
 
+    let version: i64 = conn
+        .query_row("SELECT version FROM schema_version LIMIT 1", [], |r| {
+            r.get(0)
+        })
+        .unwrap_or(0);
+
+    if version < 14 {
+        migrate_v14(conn)?;
+        conn.execute("UPDATE schema_version SET version = 14", [])?;
+    }
+
+    Ok(())
+}
+
+fn migrate_v14(conn: &Connection) -> rusqlite::Result<()> {
+    if !column_exists(conn, "indexed_items", "file_mtime")? {
+        conn.execute("ALTER TABLE indexed_items ADD COLUMN file_mtime INTEGER", [])?;
+    }
     Ok(())
 }
 

@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.28.8] - 2026-06-21
+
+### Added
+
+- `agent-brain index --changed-only` / `-c` — mtime-based skip: files with unchanged mtime are skipped without parsing or embedding, making repeated indexes 10-50x faster
+- `agent-brain index --no-ast` — skip AST symbol extraction to reduce index latency
+
+### Changed
+
+- `should_skip()` now excludes binary artifacts (`.pyc`, `.so`, `.dylib`, `.exe`, `.bin`) and dirs (`__pycache__`, `.next`, `.cache`, `vendor`) for faster file traversal
+- DB migration v14: `indexed_items.file_mtime` column for mtime tracking
+
 ## [0.28.7] - 2026-06-21
 
 ### Fixed

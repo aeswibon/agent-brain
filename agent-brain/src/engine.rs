@@ -131,7 +131,7 @@ impl Engine {
     }
 
     pub fn bootstrap(self: &Arc<Self>, cwd: Option<&Path>) -> Result<usize> {
-        let mut n = index::sync_index(&self.store, &self.config, &self.embedder, cwd)?;
+        let mut n = index::sync_index_opts(&self.store, &self.config, &self.embedder, cwd, false, true)?;
         if self.config.session_ingest_enabled && !self.config.session_ingest_background {
             let sessions =
                 crate::sessions::ingest_sessions(&self.store, &self.embedder, &self.config)?;
@@ -289,7 +289,7 @@ impl Engine {
 
     /// Index skills/rules and ingest session digests — run after install or doctor --fix.
     pub fn post_install_warmup(&self) -> Result<(usize, usize)> {
-        let indexed = index::sync_index(&self.store, &self.config, &self.embedder, None)?;
+        let indexed = index::sync_index_opts(&self.store, &self.config, &self.embedder, None, false, true)?;
         let sessions = self.run_session_ingest_sync()?;
         Ok((indexed, sessions))
     }
