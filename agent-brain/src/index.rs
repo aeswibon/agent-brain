@@ -159,6 +159,13 @@ fn should_skip(path: &Path) -> bool {
         || s.contains("/target/")
         || s.contains("/.git/")
         || s.contains("/graphify-out/")
+        || s.contains("/venv/")
+        || s.contains("/.venv/")
+        || s.contains("/opt/")
+        || s.contains("/.autonomic/")
+        || s.contains("/.pytest_cache/")
+        || s.contains("/dist/")
+        || s.contains("/build/")
 }
 
 struct ParsedItem {
