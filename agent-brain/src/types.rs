@@ -244,6 +244,9 @@ pub struct RouteTaskResponse {
     pub context_bundle: Option<ContextBundle>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub code_context: Option<crate::graphify::CodeContext>,
+    /// Lightweight git ambient state when cwd is inside a repository.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repo_snapshot: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

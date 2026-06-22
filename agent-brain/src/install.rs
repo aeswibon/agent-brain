@@ -150,8 +150,15 @@ pub fn install_project_cursor_rules(quiet: bool) -> Result<()> {
 
     let rule_path = rules_dir.join("agent-brain.mdc");
     fs::write(&rule_path, CURSOR_RULE).with_context(|| format!("write {}", rule_path.display()))?;
+    let mode_path = rules_dir.join("agent-brain-mode.mdc");
+    let mode_body = format!(
+        "---\ndescription: agent-brain mode — short on-ramp for routed memory and skills\nalwaysApply: false\n---\n\n{}",
+        host_install::AGENT_BRAIN_MODE_SNIPPET
+    );
+    fs::write(&mode_path, &mode_body).with_context(|| format!("write {}", mode_path.display()))?;
     if !quiet {
         println!("Installed project Cursor rule at {}", rule_path.display());
+        println!("Installed project Cursor mode at {}", mode_path.display());
         println!(
             "Note: Cursor does not load ~/.cursor/rules/. For global text rules, use Cursor Settings → Rules → User Rules."
         );

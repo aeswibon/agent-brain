@@ -133,26 +133,57 @@ async fn main() -> Result<()> {
         }
         "registry" => match args.get(2).map(String::as_str).unwrap_or("list") {
             "list" => {
-                println!("skill_packages:");
-                for entry in packages::list_aliases()? {
-                    let source = if let Some(bundle) = &entry.bundle {
-                        format!("bundle:{bundle}")
-                    } else {
-                        entry.packages.join(", ")
-                    };
-                    println!("  @{:<14}  {}  [{}]", entry.alias, entry.description, source);
+                let kind = args.get(3).map(String::as_str);
+                let show_skills = kind.is_none()
+                    || kind == Some("skill_package")
+                    || kind == Some("skill")
+                    || kind == Some("skills");
+                let show_utils = kind.is_none() || kind == Some("utility") || kind == Some("utilities");
+                let show_workflows = kind.is_none() || kind == Some("workflow") || kind == Some("workflows");
+
+                if show_skills {
+                    println!("skill_packages:");
+                    for entry in packages::list_aliases()? {
+                        let source = if let Some(bundle) = &entry.bundle {
+                            format!("bundle:{bundle}")
+                        } else {
+                            entry.packages.join(", ")
+                        };
+                        println!("  @{:<14}  {}  [{}]", entry.alias, entry.description, source);
+                    }
                 }
-                println!("\nutilities:");
-                for util in packages::list_utilities()? {
-                    let invoke = util.invoke.join("; ");
-                    println!(
-                        "  {:<14}  ({})  {}  [{}]",
-                        util.name, util.alias, util.description, invoke
-                    );
+                if show_utils {
+                    if show_skills {
+                        println!();
+                    }
+                    println!("utilities:");
+                    for util in packages::list_utilities()? {
+                        let invoke = util.invoke.join("; ");
+                        println!(
+                            "  {:<14}  ({})  {}  [{}]",
+                            util.name, util.alias, util.description, invoke
+                        );
+                    }
+                }
+                if show_workflows {
+                    if show_skills || show_utils {
+                        println!();
+                    }
+                    println!("workflows:");
+                    for wf in packages::list_workflows()? {
+                        println!(
+                            "  @{:<14}  {}  [{}]  {}",
+                            wf.alias, wf.description, wf.organ, wf.invoke
+                        );
+                    }
+                }
+                if !show_skills && !show_utils && !show_workflows {
+                    eprintln!("Unknown kind '{kind:?}'. Use skill_package, utility, or workflow.");
+                    std::process::exit(1);
                 }
             }
             other => {
-                eprintln!("Usage: agent-brain registry list");
+                eprintln!("Usage: agent-brain registry list [--kind skill_package|utility|workflow]");
                 if !other.is_empty() {
                     std::process::exit(1);
                 }

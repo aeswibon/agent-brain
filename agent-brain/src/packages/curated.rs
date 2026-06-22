@@ -3,6 +3,7 @@ use serde::Deserialize;
 
 const EMBEDDED_REGISTRY: &str = include_str!("../../registry/packages.json");
 const EMBEDDED_UTILITIES: &str = include_str!("../../registry/utilities.json");
+const EMBEDDED_WORKFLOWS: &str = include_str!("../../registry/workflows.json");
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct CuratedRegistryFile {
@@ -65,6 +66,47 @@ pub fn list_utilities() -> Result<Vec<UtilityInfo>> {
             description: entry.description,
             invoke: entry.invoke,
             when: entry.when,
+        })
+        .collect())
+}
+
+#[derive(Debug, Clone)]
+pub struct WorkflowInfo {
+    pub alias: String,
+    pub description: String,
+    pub organ: String,
+    pub invoke: String,
+    pub path: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct WorkflowsRegistryFile {
+    #[allow(dead_code)]
+    version: u32,
+    workflows: std::collections::BTreeMap<String, WorkflowEntry>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct WorkflowEntry {
+    description: String,
+    path: String,
+    organ: String,
+    #[serde(default)]
+    invoke: String,
+}
+
+pub fn list_workflows() -> Result<Vec<WorkflowInfo>> {
+    let reg: WorkflowsRegistryFile =
+        serde_json::from_str(EMBEDDED_WORKFLOWS).context("parse embedded workflows registry")?;
+    Ok(reg
+        .workflows
+        .into_iter()
+        .map(|(alias, entry)| WorkflowInfo {
+            alias,
+            description: entry.description,
+            organ: entry.organ,
+            invoke: entry.invoke,
+            path: entry.path,
         })
         .collect())
 }
@@ -158,6 +200,13 @@ mod tests {
             resolved,
             ResolvedAlias::Bundle("autonomic-core".into())
         );
+    }
+
+    #[test]
+    fn embedded_registry_lists_workflows() {
+        let workflows = list_workflows().unwrap();
+        assert!(workflows.iter().any(|w| w.alias == "release-notes"));
+        assert!(workflows.iter().any(|w| w.alias == "stacked-pr"));
     }
 
     #[test]

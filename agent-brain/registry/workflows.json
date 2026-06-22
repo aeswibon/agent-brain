@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "workflows": {
+    "release-notes": {
+      "description": "Tag diff → changelog → review gate",
+      "path": "workflows/release-notes.yaml",
+      "organ": "agent-spine",
+      "invoke": "agent-spine init --with @release-notes"
+    },
+    "stacked-pr": {
+      "description": "Rebase stacked branches → resolve conflicts → verify",
+      "path": "workflows/stacked-pr.yaml",
+      "organ": "agent-spine",
+      "invoke": "agent-spine init --with @stacked-pr"
+    },
+    "bugfix": {
+      "description": "Reproduce → isolate → fix → verify loop",
+      "path": "workflows/bugfix.yaml",
+      "organ": "agent-spine",
+      "invoke": "agent-spine init --with @bugfix"
+    }
+  }
+}

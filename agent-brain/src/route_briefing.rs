@@ -93,6 +93,9 @@ pub fn format_briefing(resp: &RouteTaskResponse) -> String {
     if !resp.log_id.is_empty() {
         out.push_str(&format!("Log: `{}`\n", resp.log_id));
     }
+    if let Some(repo) = &resp.repo_snapshot {
+        out.push_str(&format!("**Repo:** {repo}\n"));
+    }
     out.push('\n');
 
     section_list(
@@ -180,8 +183,13 @@ pub fn format_summary_line(resp: &RouteTaskResponse) -> String {
     } else {
         format!(" · read_gate={}", read_gate_mode())
     };
+    let repo = resp
+        .repo_snapshot
+        .as_deref()
+        .map(|s| format!(" · repo: {s}"))
+        .unwrap_or_default();
     format!(
-        "phase={} · skills: {} [{skill_names}] · agents: {} [{agent_names}] · {} rules · {} memory · {}/{} tok{}{}{}{} · {}ms · log={} · {}",
+        "phase={} · skills: {} [{skill_names}] · agents: {} [{agent_names}] · {} rules · {} memory · {}/{} tok{}{}{}{}{} · {}ms · log={} · {}",
         resp.recommended_phase,
         resp.recommended_skills.len(),
         resp.recommended_agents.len(),
@@ -193,6 +201,7 @@ pub fn format_summary_line(resp: &RouteTaskResponse) -> String {
         constraints,
         native_tools,
         read_gate,
+        repo,
         resp.latency_ms,
         resp.log_id,
         briefing_path_display()

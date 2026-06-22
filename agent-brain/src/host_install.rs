@@ -352,6 +352,9 @@ fn install_gemini_instructions(user: bool, quiet: bool) -> Result<()> {
         dir.join("agent-brain.md")
     };
     write_host_instructions(&path, HOST_AGENT_BRAIN_INSTRUCTIONS, quiet, "Gemini CLI")?;
+    if let Some(parent) = path.parent() {
+        write_agent_brain_mode(parent, quiet, "Gemini CLI")?;
+    }
     Ok(())
 }
 
@@ -369,6 +372,9 @@ fn install_antigravity_instructions(user: bool, quiet: bool) -> Result<()> {
         dir.join("agent-brain.md")
     };
     write_host_instructions(&path, HOST_AGENT_BRAIN_INSTRUCTIONS, quiet, "Antigravity")?;
+    if let Some(parent) = path.parent() {
+        write_agent_brain_mode(parent, quiet, "Antigravity")?;
+    }
     Ok(())
 }
 
@@ -482,7 +488,7 @@ const OPENCODE_ROUTE_RULE: &str = r"## HARD RULES (never skip)
 - Call `agent-brain_route_task` at the start of EVERY turn, before any other tool, skill, or action. Pass `user_message`, `current_working_directory`, and `open_files`. This is non-negotiable.
 ";
 
-const OPENCODE_MODE_SNIPPET: &str = r#"# agent-brain mode
+pub const AGENT_BRAIN_MODE_SNIPPET: &str = r#"# agent-brain mode
 
 Enforces route_task before every turn — memory, skills, and cross-session context are injected automatically.
 
@@ -496,6 +502,20 @@ Enforces route_task before every turn — memory, skills, and cross-session cont
 - Discovery: `agent-brain registry list` (skills + utilities)
 - Upstream MCP: `route_to_mcp` when `suggested_tools` appears in route_task
 "#;
+
+fn write_agent_brain_mode(dir: &Path, quiet: bool, label: &str) -> Result<()> {
+    fs::create_dir_all(dir).with_context(|| format!("create {}", dir.display()))?;
+    let path = dir.join("agent-brain-mode.md");
+    fs::write(&path, AGENT_BRAIN_MODE_SNIPPET)
+        .with_context(|| format!("write {}", path.display()))?;
+    if !quiet {
+        println!(
+            "Installed {label} agent-brain mode at {}",
+            path.display()
+        );
+    }
+    Ok(())
+}
 
 fn write_opencode_config(path: &Path, server_entry: Value, user: bool) -> Result<()> {
     if let Some(parent) = path.parent() {
@@ -534,7 +554,7 @@ fn install_opencode_instructions(user: bool, quiet: bool) -> Result<()> {
 
     let modes_dir = base.join("modes");
     fs::create_dir_all(&modes_dir)?;
-    fs::write(modes_dir.join("agent-brain.md"), OPENCODE_MODE_SNIPPET)
+    fs::write(modes_dir.join("agent-brain.md"), AGENT_BRAIN_MODE_SNIPPET)
         .with_context(|| format!("write {}", modes_dir.display()))?;
 
     if !quiet {
@@ -714,6 +734,9 @@ fn install_codex_instructions(user: bool, quiet: bool) -> Result<()> {
         dir.join("agent-brain.md")
     };
     write_host_instructions(&path, HOST_AGENT_BRAIN_INSTRUCTIONS, quiet, "Codex")?;
+    if let Some(parent) = path.parent() {
+        write_agent_brain_mode(parent, quiet, "Codex")?;
+    }
     Ok(())
 }
 
@@ -922,6 +945,9 @@ fn install_claude_code_rule(user: bool, quiet: bool) -> Result<()> {
         quiet,
         "Claude Code",
     )?;
+    if let Some(parent) = path.parent() {
+        write_agent_brain_mode(parent, quiet, "Claude Code")?;
+    }
     Ok(())
 }
 
