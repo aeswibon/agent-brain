@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use agent_brain::{
     auto_update, config::Config, doctor, engine::Engine, grpc, host_install, index, install, mcp,
-    packages, serve_meta, settings,
+    packages, registry_sync, serve_meta, settings,
 };
 use anyhow::{Context, Result};
 use tracing_subscriber::EnvFilter;
@@ -182,8 +182,25 @@ async fn main() -> Result<()> {
                     std::process::exit(1);
                 }
             }
+            "sync" => {
+                let local_only = args.iter().any(|a| a == "--local");
+                let config = Config::load()?;
+                let brain_settings = settings::AgentBrainSettings::load(&config.home);
+                let n = if local_only {
+                    registry_sync::seed_embedded(&config.home)?
+                } else {
+                    registry_sync::sync(&config.home, &brain_settings.registry)?
+                };
+                println!(
+                    "Synced {n} registry files to {}",
+                    registry_sync::cache_dir(&config.home).display()
+                );
+            }
             other => {
-                eprintln!("Usage: agent-brain registry list [--kind skill_package|utility|workflow]");
+                eprintln!(
+                    "Usage: agent-brain registry list [--kind skill_package|utility|workflow]"
+                );
+                eprintln!("       agent-brain registry sync [--local]");
                 if !other.is_empty() {
                     std::process::exit(1);
                 }
@@ -1480,6 +1497,7 @@ Usage:
   agent-brain add @starter                  Curated onboarding pack
   agent-brain add @nextjs                   Vercel React/Next.js skills
   agent-brain registry list                 Show curated @aliases
+  agent-brain registry sync [--local]       Refresh registry cache (remote or embedded)
   agent-brain package list                  List installed packages
   agent-brain package update [name]         Update one or all packages
   agent-brain package remove <name>         Remove an installed package

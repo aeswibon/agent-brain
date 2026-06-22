@@ -469,6 +469,8 @@ pub fn adhoc_sign(path: &Path) -> Result<()> {
 }
 
 fn bootstrap_registry_bundles(config: &crate::config::Config) -> Result<()> {
+    let settings = crate::settings::AgentBrainSettings::load(&config.home);
+    crate::registry_sync::ensure_cached(&config.home, &settings.registry)?;
     let registry = crate::packages::PackageRegistry::load(&config.home)?;
     let has_core = registry.packages.iter().any(|p| p.name == "autonomic-core");
     let has_supervisor = registry.packages.iter().any(|p| p.name == "supervisor");

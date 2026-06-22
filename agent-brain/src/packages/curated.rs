@@ -1,5 +1,9 @@
+use std::path::PathBuf;
+
 use anyhow::{bail, Context, Result};
 use serde::Deserialize;
+
+use crate::registry_sync;
 
 const EMBEDDED_REGISTRY: &str = include_str!("../../registry/packages.json");
 const EMBEDDED_UTILITIES: &str = include_str!("../../registry/utilities.json");
@@ -55,8 +59,10 @@ struct UtilityEntry {
 }
 
 pub fn list_utilities() -> Result<Vec<UtilityInfo>> {
+    let home = registry_home();
+    let raw = registry_sync::read_registry_file(&home, "utilities.json", EMBEDDED_UTILITIES);
     let reg: UtilitiesRegistryFile =
-        serde_json::from_str(EMBEDDED_UTILITIES).context("parse embedded utilities registry")?;
+        serde_json::from_str(&raw).context("parse utilities registry")?;
     Ok(reg
         .utilities
         .into_iter()
@@ -96,8 +102,10 @@ struct WorkflowEntry {
 }
 
 pub fn list_workflows() -> Result<Vec<WorkflowInfo>> {
+    let home = registry_home();
+    let raw = registry_sync::read_registry_file(&home, "workflows.json", EMBEDDED_WORKFLOWS);
     let reg: WorkflowsRegistryFile =
-        serde_json::from_str(EMBEDDED_WORKFLOWS).context("parse embedded workflows registry")?;
+        serde_json::from_str(&raw).context("parse workflows registry")?;
     Ok(reg
         .workflows
         .into_iter()
@@ -112,7 +120,20 @@ pub fn list_workflows() -> Result<Vec<WorkflowInfo>> {
 }
 
 pub fn load_curated_registry() -> Result<CuratedRegistryFile> {
-    serde_json::from_str(EMBEDDED_REGISTRY).context("parse embedded package registry")
+    let home = registry_home();
+    let raw = registry_sync::read_registry_file(&home, "packages.json", EMBEDDED_REGISTRY);
+    serde_json::from_str(&raw).context("parse package registry")
+}
+
+fn registry_home() -> PathBuf {
+    std::env::var("AGENT_BRAIN_HOME")
+        .map(PathBuf::from)
+        .or_else(|_| crate::config::Config::load().map(|c| c.home))
+        .unwrap_or_else(|_| {
+            dirs::home_dir()
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join(".agent_brain")
+        })
 }
 
 pub fn list_aliases() -> Result<Vec<CuratedAliasInfo>> {

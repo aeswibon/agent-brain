@@ -43,6 +43,7 @@ pub mod operator_digest;
 pub mod packages;
 pub mod promote;
 pub mod proofs;
+pub mod registry_sync;
 pub mod retrieval;
 pub mod repo_snapshot;
 pub mod route_briefing;
