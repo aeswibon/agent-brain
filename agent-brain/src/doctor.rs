@@ -236,6 +236,7 @@ pub fn run(fix: bool) -> Result<()> {
         std::process::exit(1);
     }
     if fix {
+        bootstrap_registry_bundles(&config)?;
         if let Ok((indexed, sessions)) = (|| {
             let engine = crate::engine::Engine::new(config.clone())?;
             engine.post_install_warmup()
@@ -266,7 +267,7 @@ fn print_other_hosts(home: &Path) {
     let antigravity_shared = home.join(".gemini/config/mcp_config.json");
     println!(
         "  opencode (global):     {}",
-        host_mcp_status(&opencode, "mcp", "agent-brain")
+        opencode_integration_detail(home)
     );
     println!("  codex (global):        {}", codex_mcp_status(&codex));
     println!(
@@ -464,5 +465,74 @@ pub fn adhoc_sign(path: &Path) -> Result<()> {
     {
         let _ = path;
         Ok(())
+    }
+}
+
+fn bootstrap_registry_bundles(config: &crate::config::Config) -> Result<()> {
+    let registry = crate::packages::PackageRegistry::load(&config.home)?;
+    let has_core = registry.packages.iter().any(|p| p.name == "autonomic-core");
+    let has_supervisor = registry.packages.iter().any(|p| p.name == "supervisor");
+    if !has_core {
+        crate::packages::install_bundled(config, "autonomic-core")?;
+        println!("  bootstrap:           installed @autonomic-core");
+    }
+    if !has_supervisor {
+        crate::packages::install_bundled(config, "supervisor")?;
+        println!("  bootstrap:           installed @supervisor");
+    }
+    Ok(())
+}
+
+fn opencode_integration_detail(home: &Path) -> String {
+    let config_path = home.join(".config/opencode/opencode.json");
+    let base = home.join(".config/opencode");
+    if !config_path.is_file() {
+        return "not configured".into();
+    }
+    if host_mcp_status(&config_path, "mcp", "agent-brain") != "OK" {
+        return "MCP missing agent-brain".into();
+    }
+
+    let mut issues = Vec::new();
+    if let Ok(raw) = fs::read_to_string(&config_path) {
+        if let Ok(root) = serde_json::from_str::<serde_json::Value>(&raw) {
+            let has_instructions = root
+                .get("instructions")
+                .and_then(|v| v.as_array())
+                .is_some_and(|arr| {
+                    arr.iter().any(|v| {
+                        v.as_str()
+                            .is_some_and(|s| s.contains("agent-brain-route"))
+                    })
+                });
+            if !has_instructions {
+                issues.push("instructions");
+            }
+            let has_plugin = root
+                .get("plugin")
+                .and_then(|v| v.as_array())
+                .is_some_and(|arr| {
+                    arr.iter()
+                        .any(|v| v.as_str() == Some("agent-brain-route-gate"))
+                });
+            if !has_plugin {
+                issues.push("plugin");
+            }
+        }
+    }
+    if !base.join("rules/agent-brain-route.md").is_file() {
+        issues.push("route-rule");
+    }
+    if !base.join("modes/agent-brain.md").is_file() {
+        issues.push("mode");
+    }
+    if !base.join("agent-brain.md").is_file() {
+        issues.push("instructions-file");
+    }
+
+    if issues.is_empty() {
+        "OK (MCP + instructions + plugin + mode)".into()
+    } else {
+        format!("partial — missing {}", issues.join(", "))
     }
 }

@@ -498,6 +498,12 @@ impl Engine {
             if is_empty_route_response(&cached) {
                 self.cache.remove(&cache_key);
             } else {
+                if let Some(repo) = ws.repo_root.as_deref() {
+                    cached.repo_snapshot = crate::repo_snapshot::capture(
+                        std::path::Path::new(repo),
+                        &self.config.home,
+                    );
+                }
                 let total_us = started.elapsed().as_micros() as u64;
                 cached.latency_ms = total_us / 1000;
                 let timing = RouteTiming {
@@ -530,6 +536,10 @@ impl Engine {
         let build_started = Instant::now();
         let mut resp = build_route_response(&scored, &limits, &phase, max_tokens);
         resp.index_total = index_total;
+        if let Some(repo) = ws.repo_root.as_deref() {
+            resp.repo_snapshot =
+                crate::repo_snapshot::capture(std::path::Path::new(repo), &self.config.home);
+        }
         let settings = crate::settings::AgentBrainSettings::load(&self.config.home);
         resp.suggested_tools = crate::upstream::suggest_upstream_tools(
             &self.store,

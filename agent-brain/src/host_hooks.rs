@@ -332,11 +332,19 @@ pub fn install_vscode_copilot_instructions(quiet: bool) -> Result<()> {
     fs::create_dir_all(path.parent().unwrap())?;
     fs::write(&path, VSCODE_COPILOT_INSTRUCTIONS)
         .with_context(|| format!("write {}", path.display()))?;
+    let mode_path = root.join(".github").join("agent-brain-mode.md");
+    if !mode_path.is_file() {
+        fs::write(&mode_path, crate::host_install::AGENT_BRAIN_MODE_SNIPPET)
+            .with_context(|| format!("write {}", mode_path.display()))?;
+    }
     if !quiet {
         println!(
             "Installed GitHub Copilot instructions at {}",
             path.display()
         );
+        if mode_path.is_file() {
+            println!("Installed VS Code agent-brain mode at {}", mode_path.display());
+        }
     }
     Ok(())
 }

@@ -44,6 +44,7 @@ pub mod packages;
 pub mod promote;
 pub mod proofs;
 pub mod retrieval;
+pub mod repo_snapshot;
 pub mod route_briefing;
 pub mod scale_bench;
 pub mod secrets;
