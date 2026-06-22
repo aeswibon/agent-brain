@@ -23,6 +23,8 @@ pub struct AgentBrainSettings {
     #[serde(default)]
     pub graphify: GraphifySettings,
     #[serde(default)]
+    pub registry: RegistrySettings,
+    #[serde(default)]
     pub docs: DocsSettings,
 }
 
@@ -192,6 +194,73 @@ impl Default for DocsSettings {
             max_chunks: default_docs_max_chunks(),
             chunk_words: default_docs_chunk_words(),
             summary_words: default_docs_summary_words(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RegistrySettings {
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// GitHub repo slug for raw registry fetch (future: autonomic-ai-dev/agent-registry).
+    #[serde(default = "default_registry_remote_repo")]
+    pub remote_repo: String,
+    #[serde(default = "default_registry_remote_ref")]
+    pub remote_ref: String,
+    /// Path inside the remote repo (interim: agent-brain ships registry under this prefix).
+    #[serde(default = "default_registry_subpath")]
+    pub registry_subpath: String,
+    #[serde(default = "default_registry_sync_interval_hours")]
+    pub sync_interval_hours: u32,
+    #[serde(default = "default_true")]
+    pub sync_on_doctor: bool,
+}
+
+fn default_registry_remote_repo() -> String {
+    "autonomic-ai-dev/agent-brain".into()
+}
+
+fn default_registry_remote_ref() -> String {
+    "master".into()
+}
+
+fn default_registry_subpath() -> String {
+    "agent-brain/registry".into()
+}
+
+fn default_registry_sync_interval_hours() -> u32 {
+    24
+}
+
+impl Default for RegistrySettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            remote_repo: default_registry_remote_repo(),
+            remote_ref: default_registry_remote_ref(),
+            registry_subpath: default_registry_subpath(),
+            sync_interval_hours: default_registry_sync_interval_hours(),
+            sync_on_doctor: true,
+        }
+    }
+}
+
+impl RegistrySettings {
+    pub fn raw_url_base(&self) -> String {
+        let sub = self.registry_subpath.trim_matches('/');
+        if sub.is_empty() {
+            format!(
+                "https://raw.githubusercontent.com/{}/{}",
+                self.remote_repo.trim(),
+                self.remote_ref.trim()
+            )
+        } else {
+            format!(
+                "https://raw.githubusercontent.com/{}/{}/{}",
+                self.remote_repo.trim(),
+                self.remote_ref.trim(),
+                sub
+            )
         }
     }
 }
@@ -482,6 +551,7 @@ impl AgentBrainSettings {
             observation: ObservationSettings::default(),
             trace_extract: TraceExtractSettings::default(),
             graphify: GraphifySettings::default(),
+            registry: RegistrySettings::default(),
             docs: DocsSettings::default(),
         }
     }
