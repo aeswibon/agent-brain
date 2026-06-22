@@ -246,7 +246,7 @@ pub fn opencode_config_path(user: bool) -> Result<PathBuf> {
 
 fn install_opencode(exe: &Path, user: bool, quiet: bool) -> Result<Vec<PathBuf>> {
     let path = opencode_config_path(user)?;
-    write_opencode_config(&path, opencode_server_entry(exe))?;
+    write_opencode_config(&path, opencode_server_entry(exe), user)?;
     install_opencode_instructions(user, quiet)?;
     crate::host_hooks::install_opencode_hooks(user, quiet)?;
     if !quiet {
@@ -398,7 +398,7 @@ fn opencode_server_entry(exe: &Path) -> Value {
     entry
 }
 
-pub fn merge_opencode_config(path: &Path, server_entry: Value) -> Result<Value> {
+pub fn merge_opencode_config(path: &Path, server_entry: Value, user: bool) -> Result<Value> {
     let mut root = if path.exists() {
         let raw = fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
         serde_json::from_str(&raw).with_context(|| format!("parse {}", path.display()))?
@@ -430,33 +430,119 @@ pub fn merge_opencode_config(path: &Path, server_entry: Value) -> Result<Value> 
             root["mcp"] = json!({ "agent-brain": server_entry });
         }
     }
+
+    let instruction_paths = opencode_instruction_paths(user);
+    merge_json_string_array(&mut root, "instructions", &instruction_paths);
+    merge_json_string_array(
+        &mut root,
+        "plugin",
+        &[OPENCODE_PLUGIN_NAME.to_string()],
+    );
+
     Ok(root)
 }
 
-fn write_opencode_config(path: &Path, server_entry: Value) -> Result<()> {
+fn opencode_instruction_paths(user: bool) -> Vec<String> {
+    if user {
+        vec![
+            "~/.config/opencode/rules/agent-brain-route.md".into(),
+            "~/.config/opencode/agent-brain.md".into(),
+        ]
+    } else {
+        vec![
+            ".opencode/rules/agent-brain-route.md".into(),
+            ".opencode/agent-brain.md".into(),
+        ]
+    }
+}
+
+fn merge_json_string_array(root: &mut Value, key: &str, values: &[String]) {
+    let Some(obj) = root.as_object_mut() else {
+        return;
+    };
+    if !obj.contains_key(key) {
+        obj.insert(key.to_string(), json!([]));
+    }
+    let Some(arr) = obj.get_mut(key).and_then(|v| v.as_array_mut()) else {
+        obj.insert(key.to_string(), json!(values));
+        return;
+    };
+    for value in values {
+        let entry = json!(value);
+        if !arr.contains(&entry) {
+            arr.push(entry);
+        }
+    }
+}
+
+const OPENCODE_PLUGIN_NAME: &str = "agent-brain-route-gate";
+
+const OPENCODE_ROUTE_RULE: &str = r"## HARD RULES (never skip)
+
+- Call `agent-brain_route_task` at the start of EVERY turn, before any other tool, skill, or action. Pass `user_message`, `current_working_directory`, and `open_files`. This is non-negotiable.
+";
+
+const OPENCODE_MODE_SNIPPET: &str = r#"# agent-brain mode
+
+Enforces route_task before every turn — memory, skills, and cross-session context are injected automatically.
+
+## Rules
+- Call `agent-brain_route_task` with `user_message`, `current_working_directory`, `open_files` at the start of every turn
+- Use agent-brain `grep_search`, `file_summary`, `read_file_head`, `read_file_tail` instead of native Read/Grep
+- Call `store_memory` at task end for durable outcomes
+
+## Autonomic utilities (delegate, don't improvise)
+- Workflows: `agent-spine run --meta "..."` or `agent-spine init --with @workflow`
+- Discovery: `agent-brain registry list` (skills + utilities)
+- Upstream MCP: `route_to_mcp` when `suggested_tools` appears in route_task
+"#;
+
+fn write_opencode_config(path: &Path, server_entry: Value, user: bool) -> Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
     }
-    let merged = merge_opencode_config(path, server_entry)?;
+    let merged = merge_opencode_config(path, server_entry, user)?;
     let pretty = serde_json::to_string_pretty(&merged)?;
     fs::write(path, format!("{pretty}\n")).with_context(|| format!("write {}", path.display()))?;
     Ok(())
 }
 
-fn install_opencode_instructions(user: bool, quiet: bool) -> Result<()> {
-    let path = if user {
+fn opencode_base_dir(user: bool) -> Result<PathBuf> {
+    if user {
         let home = dirs::home_dir().context("home directory")?;
         let dir = home.join(".config").join("opencode");
         fs::create_dir_all(&dir)?;
-        dir.join("agent-brain.md")
+        Ok(dir)
     } else {
         let cwd = std::env::current_dir().context("current working directory")?;
         let root = crate::config::find_repo_root(&cwd).unwrap_or(cwd);
         let dir = root.join(".opencode");
         fs::create_dir_all(&dir)?;
-        dir.join("agent-brain.md")
-    };
-    write_host_instructions(&path, HOST_AGENT_BRAIN_INSTRUCTIONS, quiet, "OpenCode")?;
+        Ok(dir)
+    }
+}
+
+fn install_opencode_instructions(user: bool, quiet: bool) -> Result<()> {
+    let base = opencode_base_dir(user)?;
+    let full_path = base.join("agent-brain.md");
+    write_host_instructions(&full_path, HOST_AGENT_BRAIN_INSTRUCTIONS, quiet, "OpenCode")?;
+
+    let rules_dir = base.join("rules");
+    fs::create_dir_all(&rules_dir)?;
+    fs::write(rules_dir.join("agent-brain-route.md"), OPENCODE_ROUTE_RULE)
+        .with_context(|| format!("write {}", rules_dir.display()))?;
+
+    let modes_dir = base.join("modes");
+    fs::create_dir_all(&modes_dir)?;
+    fs::write(modes_dir.join("agent-brain.md"), OPENCODE_MODE_SNIPPET)
+        .with_context(|| format!("write {}", modes_dir.display()))?;
+
+    if !quiet {
+        println!(
+            "Installed OpenCode route rule and agent-brain mode under {}",
+            base.display()
+        );
+    }
     Ok(())
 }
 
@@ -647,10 +733,10 @@ fn write_host_instructions(path: &Path, content: &str, quiet: bool, label: &str)
     Ok(())
 }
 
-const HOST_INSTRUCTIONS_VERSION: &str = "5";
+const HOST_INSTRUCTIONS_VERSION: &str = "6";
 
 const HOST_AGENT_BRAIN_INSTRUCTIONS: &str = r#"# agent-brain MCP (required)
-instructions-version: 5
+instructions-version: 6
 
 ## The connection contract
 
@@ -669,6 +755,20 @@ If the agent skips route_task, cross-agent ingest and shared memory provide **ze
 2. Load skills/agents from returned paths; apply `applicable_rules` and `must_apply`.
 3. Use `relevant_memory` (includes session digests when relevant).
 4. At task end, call **`store_memory`** for durable outcomes (max 50 words, no secrets).
+
+## Autonomic utility ecosystem
+
+When agent-brain mode is on, **delegate** to sibling utilities instead of improvising multi-step work:
+
+| Utility | When | Invoke |
+|---------|------|--------|
+| **agent-spine** | Repeatable workflows (release notes, stacked PRs, bugfix loops) | `agent-spine run --meta "..."` or `agent-spine init --with @workflow` |
+| **agent-heart** | Budget-sensitive or long runs | `agent-heart status` |
+| **agent-body** | Route to any organ | `autonomic spine run`, `autonomic brain briefing` |
+
+- `agent-brain registry list` — skill @aliases and utility catalog
+- `route_to_mcp` — forward to configured upstream MCP tools (`suggested_tools` in route_task)
+- Bootstrap: `agent-brain add @autonomic-core` + `agent-brain add @supervisor`
 
 ## Native host tools (OpenCode / Claude Code / VS Code / Gemini / Antigravity)
 
@@ -955,10 +1055,23 @@ mod tests {
                 "command": ["/bin/agent-brain", "serve"],
                 "enabled": true
             }),
+            true,
         )
         .unwrap();
         assert_eq!(merged["model"], "test/model");
         assert_eq!(merged["mcp"]["agent-brain"]["type"], "local");
+        let instructions = merged["instructions"].as_array().unwrap();
+        assert!(instructions.iter().any(|v| {
+            v.as_str()
+                .is_some_and(|s| s.contains("agent-brain-route.md"))
+        }));
+        assert!(instructions.iter().any(|v| {
+            v.as_str().is_some_and(|s| s.contains("agent-brain.md"))
+        }));
+        let plugins = merged["plugin"].as_array().unwrap();
+        assert!(plugins
+            .iter()
+            .any(|v| v.as_str() == Some("agent-brain-route-gate")));
     }
 
     fn host_target_parses_opencode_flag() {
