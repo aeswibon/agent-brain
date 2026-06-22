@@ -5,20 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.29.1] - 2026-06-22
+
+### Added
+
+- Session routing stickiness — reuse route results within a session when scope/phase/files match (`AGENT_BRAIN_SESSION_STICKINESS_SECS`, default 1800s)
+- High-confidence skill auto-inject — skills with score ≥ 0.8 include body text in `route_task` / `context_bundle.skill_docs`
+- Edit-memory suggestions from hooks on successful file writes; `suggest-memory approve` handles anti-pattern and edit hints
+
+### Changed
+
+- Registry defaults target `autonomic-ai-dev/agent-registry` (`remote_ref: master`, empty subpath)
+- `suggest-memory` CLI shows any pending hook suggestion (not only anti-pattern)
+
 ## [0.29.0] - 2026-06-22
 
 ### Added
 
 - Phase 1: lightweight `repo_snapshot` in `route_task`; cross-host agent-brain mode; doctor OpenCode integration checks; registry workflow presets (`release-notes`, `stacked-pr`, `bugfix`)
 - Phase 2: `registry_sync` cache at `~/.agent_brain/registry-cache/` (embedded seed + remote fetch); `agent-brain registry sync [--local]`; `opencode_integration_bench.py` (GAP-MET-01)
-- Phase 3: session routing stickiness (`AGENT_BRAIN_SESSION_STICKINESS_SECS`); high-confidence skill body auto-inject (score ≥ 0.8); edit-memory suggestions from hook file edits
-- `RegistrySettings` defaults point at `autonomic-ai-dev/agent-registry` (embedded fallback offline)
+- `RegistrySettings` in config (`remote_repo`, `remote_ref`, `registry_subpath`, sync interval)
 
 ### Changed
 
 - `packages/curated` reads registry JSON from cache with embedded fallback
 - `doctor --fix` seeds registry cache via `ensure_cached` before bundle bootstrap
-- `suggest-memory` approves anti-pattern or edit suggestions from hooks
 
 ## [0.28.9] - 2026-06-22
 
