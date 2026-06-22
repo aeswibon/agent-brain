@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.29.0] - 2026-06-22
+
+### Added
+
+- Phase 1: lightweight `repo_snapshot` in `route_task`; cross-host agent-brain mode; doctor OpenCode integration checks; registry workflow presets (`release-notes`, `stacked-pr`, `bugfix`)
+- Phase 2: `registry_sync` cache at `~/.agent_brain/registry-cache/` (embedded seed + remote fetch); `agent-brain registry sync [--local]`; `opencode_integration_bench.py` (GAP-MET-01)
+- `RegistrySettings` in config (`remote_repo`, `remote_ref`, `registry_subpath`, sync interval)
+
+### Changed
+
+- `packages/curated` reads registry JSON from cache with embedded fallback
+- `doctor --fix` seeds registry cache via `ensure_cached` before bundle bootstrap
+
 ## [0.28.9] - 2026-06-22
 
 ### Added
