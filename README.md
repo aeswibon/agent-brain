@@ -58,7 +58,7 @@ cargo install --git https://github.com/autonomic-ai-dev/agent-brain --locked age
 agent-brain install --global
 ```
 
-`install --global` writes MCP config, hooks, permissions, and the project rule. You do not run `serve` manually — your MCP host spawns it.
+`install --global` writes MCP config, hooks, permissions, the project rule, and agent-brain mode files. Paste `~/.agent_brain/cursor-user-rules.mdc` into Cursor **User Rules**. You do not run `serve` manually — your MCP host spawns it.
 
 Verify:
 
@@ -106,7 +106,8 @@ Full operator guide: [docs/USAGE.md](docs/USAGE.md) · Architecture deep dive: [
 | `agent-brain package list\|update\|remove` | Manage packages |
 | `agent-brain sync git\|cloud ...` | Multi-machine brain sync |
 | `agent-brain secrets setup\|status` | Keychain-backed secret refs |
-| `agent-brain doctor` | MCP path, hooks, stale serve, sync health |
+| `agent-brain doctor` | MCP path, hooks, stale serve, sync health (ProgressTree with `--progress`) |
+| `agent-brain mode install --global` | Write agent-brain mode snippets for all host agents |
 | `agent-brain briefing` | Last route summary |
 | `agent-brain index` | Force reindex |
 | `agent-brain version` | Installed version |
