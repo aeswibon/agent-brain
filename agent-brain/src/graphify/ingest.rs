@@ -81,6 +81,19 @@ pub struct CodeGraphNodeRow {
 }
 
 #[derive(Debug, Clone)]
+pub struct AstCodeNodeRow {
+    pub repo_root: String,
+    pub symbol_name: String,
+    pub symbol_kind: String,
+    pub content: String,
+    pub source_file: String,
+    pub start_line: usize,
+    pub end_line: usize,
+    pub language: String,
+    pub doc_comment: Option<String>,
+}
+
+#[derive(Debug, Clone)]
 pub struct CodeGraphEdgeRow {
     pub source_id: String,
     pub target_id: String,
@@ -132,6 +145,60 @@ fn edge_row(e: &GraphJsonEdge) -> CodeGraphEdgeRow {
 }
 
 impl BrainStore {
+    /// Upsert AST-derived symbol nodes into code_graph_nodes.
+    /// Uses INSERT OR REPLACE keyed on (repo_root, graphify_id) so graphify nodes are not disturbed.
+    pub fn upsert_ast_code_nodes(
+        &self,
+        repo_root: &str,
+        nodes: &[AstCodeNodeRow],
+        ingested_at: i64,
+    ) -> Result<()> {
+        self.with_conn(|conn| {
+            for n in nodes {
+                let graphify_id = format!("ast:{}:{}", n.source_file, n.symbol_name);
+                let id = format!("{repo_root}:{graphify_id}");
+                let label = format!("{}.{}", n.language, n.symbol_name);
+                let file_type = format!("ast:{}", n.language);
+                let ast_json = serde_json::json!({
+                    "kind": n.symbol_kind,
+                    "content": n.content,
+                    "doc": n.doc_comment,
+                });
+                conn.execute(
+                    r#"
+                    INSERT INTO code_graph_nodes (
+                        id, repo_root, graphify_id, label, community_id, is_god_node,
+                        source_file, file_type, ingested_at, ast_symbol, start_line, end_line
+                    ) VALUES (?1, ?2, ?3, ?4, NULL, 0, ?5, ?6, ?7, ?8, ?9, ?10)
+                    ON CONFLICT(repo_root, graphify_id) DO UPDATE SET
+                        label = excluded.label,
+                        source_file = excluded.source_file,
+                        file_type = excluded.file_type,
+                        ingested_at = excluded.ingested_at,
+                        ast_symbol = excluded.ast_symbol,
+                        start_line = excluded.start_line,
+                        end_line = excluded.end_line
+                    "#,
+                    rusqlite::params![
+                        id,
+                        repo_root,
+                        graphify_id,
+                        label,
+                        n.source_file,
+                        file_type,
+                        ingested_at,
+                        ast_json.to_string(),
+                        n.start_line as i64,
+                        n.end_line as i64,
+                    ],
+                )?;
+            }
+            Ok(())
+        })
+    }
+
+    /// Atomically replace ALL code graph nodes and edges for a repo (graphify pipeline).
+    /// NOTE: this deletes AST-derived nodes too. The AST pipeline re-adds them on the next sync_index().
     pub fn replace_code_graph(
         &self,
         repo_root: &str,

@@ -244,6 +244,36 @@ pub fn run(conn: &Connection) -> rusqlite::Result<()> {
         conn.execute("UPDATE schema_version SET version = 14", [])?;
     }
 
+    if version < 15 {
+        migrate_v15(conn)?;
+        conn.execute("UPDATE schema_version SET version = 15", [])?;
+    }
+
+    Ok(())
+}
+
+fn migrate_v15(conn: &Connection) -> rusqlite::Result<()> {
+    if !column_exists(conn, "code_graph_nodes", "ast_symbol")? {
+        conn.execute("ALTER TABLE code_graph_nodes ADD COLUMN ast_symbol TEXT", [])?;
+    }
+    if !column_exists(conn, "code_graph_nodes", "embedding_id")? {
+        conn.execute(
+            "ALTER TABLE code_graph_nodes ADD COLUMN embedding_id TEXT",
+            [],
+        )?;
+    }
+    if !column_exists(conn, "code_graph_nodes", "start_line")? {
+        conn.execute(
+            "ALTER TABLE code_graph_nodes ADD COLUMN start_line INTEGER",
+            [],
+        )?;
+    }
+    if !column_exists(conn, "code_graph_nodes", "end_line")? {
+        conn.execute(
+            "ALTER TABLE code_graph_nodes ADD COLUMN end_line INTEGER",
+            [],
+        )?;
+    }
     Ok(())
 }
 

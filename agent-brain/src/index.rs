@@ -1,5 +1,7 @@
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
+use std::sync::Mutex;
 
 use anyhow::Result;
 use uuid::Uuid;
@@ -8,6 +10,7 @@ use walkdir::WalkDir;
 use crate::config::Config;
 use crate::db::store::{content_hash, BrainStore, IndexBatchItem};
 use crate::embed::Embedder;
+use crate::graphify::AstCodeNodeRow;
 use crate::types::ItemType;
 
 /// Maximum batch size for ONNX embedding calls.
@@ -91,6 +94,7 @@ pub fn sync_index_opts(
     };
 
     use rayon::prelude::*;
+    let ast_nodes = Mutex::new(Vec::new());
     let parsed_items: Vec<UnembeddedItem> = file_tasks
         .into_par_iter()
         .flat_map(|(path, repo, pkg_ctx)| {
@@ -118,6 +122,22 @@ pub fn sync_index_opts(
                             scope_key: path.to_str().map(|s| s.to_string()),
                         };
                         items.push(UnembeddedItem { item, hash, mtime });
+
+                        if let Some(ref repo_root) = repo {
+                            if let Ok(mut guard) = ast_nodes.lock() {
+                                guard.push(AstCodeNodeRow {
+                                    repo_root: repo_root.display().to_string(),
+                                    symbol_name: symbol.symbol_name.clone(),
+                                    symbol_kind: symbol.symbol_kind.clone(),
+                                    content: symbol.content.clone(),
+                                    source_file: symbol.file_path.clone(),
+                                    start_line: symbol.start_line,
+                                    end_line: symbol.end_line,
+                                    language: symbol.language.clone(),
+                                    doc_comment: symbol.doc_comment.clone(),
+                                });
+                            }
+                        }
                     }
                 }
             }
@@ -203,6 +223,22 @@ pub fn sync_index_opts(
     // Phase 3: batch-upsert in a single SQLite transaction
     store.upsert_indexed_items_batch(&db_items)?;
     store.bump_index_version()?;
+
+    // Phase 4: store AST-derived nodes in code_graph_nodes
+    let ast_node_list = ast_nodes.into_inner().unwrap_or_default();
+    if !ast_node_list.is_empty() {
+        let mut by_repo: HashMap<String, Vec<AstCodeNodeRow>> = HashMap::new();
+        for node in ast_node_list {
+            by_repo
+                .entry(node.repo_root.clone())
+                .or_default()
+                .push(node);
+        }
+        let now = chrono::Utc::now().timestamp();
+        for (repo_root, nodes) in &by_repo {
+            store.upsert_ast_code_nodes(repo_root, nodes, now)?;
+        }
+    }
 
     Ok(db_items.len())
 }
