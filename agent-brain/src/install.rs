@@ -114,10 +114,12 @@ pub fn run_post_install_warmup(quiet: bool) -> Result<()> {
 fn print_cursor_next_steps() {
     println!("Cursor next steps:");
     println!("  1. Paste User Rules from ~/.agent_brain/cursor-user-rules.mdc");
+    println!("     Optional mode: ~/.agent_brain/cursor-agent-brain-mode.mdc");
     println!("     (Settings → Rules, Memories, and Commands → User Rules)");
     println!("  2. Restart Cursor or toggle agent-brain under Settings → MCP");
     println!("  3. Confirm hooks under Settings → Hooks (route_task gate)");
-    println!("  4. After rebuilds or brew upgrade: agent-brain install --global --reload");
+    println!("  4. Other hosts: agent-brain mode paths");
+    println!("  5. After rebuilds or brew upgrade: agent-brain install --global --reload");
     println!();
     println!("Other hosts: agent-brain install --claude-desktop | --vscode | --claude-code | --opencode | --codex | --gemini | --antigravity [--global] | --all");
 }
@@ -201,6 +203,7 @@ pub fn configure_cursor(global: bool, exe: &Path, quiet: bool) -> Result<()> {
         install_cursor_hooks(quiet)?;
         install_cursor_permissions(quiet)?;
         install_cursor_user_rules_snippet(quiet)?;
+        host_install::install_agent_brain_modes(true, quiet)?;
     } else {
         install_project_cursor_rules(quiet)?;
     }
