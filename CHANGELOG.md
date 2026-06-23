@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.29.2] - 2026-06-23
+
+### Added
+
+- ProgressTree on `doctor` and global `--progress` argv stripping
+- `agent-brain mode` CLI (`paths`, `show`, `install --global`) — agent-brain mode files for Cursor, Codex, Claude, Gemini, Antigravity, OpenCode, VS Code
+- `install --global` writes `~/.agent_brain/cursor-user-rules.mdc` for Cursor User Rules paste
+
+### Fixed
+
+- `install --global` copies signed MCP binary to `~/.local/bin/agent-brain` when Homebrew Cellar blocks xattr/codesign on macOS
+- Clearer `xattr permission denied` guidance in `doctor`
+
 ## [0.29.1] - 2026-06-22
 
 ### Added
