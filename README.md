@@ -2,15 +2,13 @@
 
 **Cloud-Native role: Memory store** (PersistentVolume + ConfigMap analog) — durable context, skills, and temporal knowledge for AI agents.
 
-Part of the **[Autonomic AI](https://github.com/autonomic-ai-dev/agent-body)** stack. Works standalone (MCP + CLI) or integrated via `autonomic brain …`, shared `~/.autonomic/config.toml`, and agent-spine workflows.
+Part of the **[Autonomic AI](https://github.com/autonomic-ai-dev/agent-body)** stack. `agent-brain` implements **Dual-Mode MCP Transport**, meaning it scales effortlessly from a single standalone binary to a fully distributed cluster.
 
-> Codename: *brain organ*. Mapping: [cloud-native-platform.md](https://github.com/autonomic-ai-dev/agent-body/blob/master/docs/cloud-native-platform.md)
+### Standalone Mode (Graceful Degradation)
+If you just want to solve context window bloat in Cursor, you can install `agent-brain` as a standalone binary. It detects that no cluster is running and gracefully degrades, serving the Memory MCP directly over standard `stdio`.
 
-| Standalone | Integrated |
-|------------|------------|
-| `agent-brain serve` (MCP stdio) | `autonomic brain serve` |
-| `agent-brain doctor` | agent-spine BrainRouter |
-| Own config / hooks | `[brain]` in unified config |
+### Cluster Mode (MCP API Gateway)
+If you upgrade to the full Autonomic architecture, `agent-brain` detects the local NATS broker (`agent-nerves`). It immediately drops its `stdio` listener and connects to the cluster service mesh. You then point your IDE to the unified `autonomic serve-mcp` Gateway, which aggregates `agent-brain` and all other tools into a single massive LLM super-server.
 
 ---
 
