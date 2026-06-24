@@ -2,6 +2,7 @@ use std::fs;
 use std::path::Path;
 
 use anyhow::{bail, Context, Result};
+use serde::Serialize;
 use uuid::Uuid;
 
 use crate::db::store::BrainStore;
@@ -330,6 +331,249 @@ impl BrainStore {
             Ok(v)
         })
     }
+
+    // ── KG Phase 2: symbol navigation queries ────────────────
+
+    /// Search symbols in code_graph_nodes using SQL LIKE on label.
+    pub fn search_symbols(
+        &self,
+        repo_root: &str,
+        query: &str,
+        language: Option<&str>,
+        file: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<SymbolMatch>> {
+        self.with_conn(|conn| {
+            let pattern = format!("%{}%", query);
+            let mut sql = String::from(
+                "SELECT label, source_file, file_type, start_line, end_line, ast_symbol
+                 FROM code_graph_nodes
+                 WHERE repo_root = ?1 AND (label LIKE ?2 OR ast_symbol LIKE ?2)"
+            );
+            let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = vec![
+                Box::new(repo_root.to_string()),
+                Box::new(pattern),
+            ];
+            if let Some(lang) = language {
+                let idx = params.len() + 1;
+                sql.push_str(&format!(" AND file_type = ?{idx}"));
+                params.push(Box::new(format!("ast:{lang}")));
+            }
+            if let Some(f) = file {
+                let idx = params.len() + 1;
+                sql.push_str(&format!(" AND source_file LIKE ?{idx}"));
+                params.push(Box::new(format!("%{f}%")));
+            }
+            sql.push_str(" ORDER BY start_line LIMIT ?");
+            let limit_idx = params.len() + 1;
+            params.push(Box::new(limit as i64));
+            sql.push_str(&limit_idx.to_string());
+
+            let mut stmt = conn.prepare(&sql)?;
+            let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+            let rows = stmt.query_map(param_refs.as_slice(), |r| {
+                Ok(SymbolMatch {
+                    label: r.get(0)?,
+                    source_file: r.get(1)?,
+                    file_type: r.get(2)?,
+                    start_line: r.get::<_, Option<i64>>(3)?.unwrap_or(0) as usize,
+                    end_line: r.get::<_, Option<i64>>(4)?.unwrap_or(0) as usize,
+                    ast_symbol: r.get::<_, Option<String>>(5)?,
+                })
+            })?;
+            Ok(rows.filter_map(|r| r.ok()).collect())
+        })
+    }
+
+    /// Get a single symbol definition by name (and optionally file).
+    pub fn get_symbol_definition(
+        &self,
+        repo_root: &str,
+        name: &str,
+        file: Option<&str>,
+    ) -> Result<Option<SymbolMatch>> {
+        self.with_conn(|conn| {
+            let mut sql = String::from(
+                "SELECT label, source_file, file_type, start_line, end_line, ast_symbol
+                 FROM code_graph_nodes
+                 WHERE repo_root = ?1 AND (label LIKE ?2 OR label = ?2)"
+            );
+            let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = vec![
+                Box::new(repo_root.to_string()),
+                Box::new(format!("%.{name}")),
+            ];
+            if let Some(f) = file {
+                let idx = params.len() + 1;
+                sql.push_str(&format!(" AND source_file LIKE ?{idx}"));
+                params.push(Box::new(format!("%{f}%")));
+            }
+            sql.push_str(" LIMIT 1");
+
+            let mut stmt = conn.prepare(&sql)?;
+            let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+            let row = stmt.query_row(param_refs.as_slice(), |r| {
+                Ok(SymbolMatch {
+                    label: r.get(0)?,
+                    source_file: r.get(1)?,
+                    file_type: r.get(2)?,
+                    start_line: r.get::<_, Option<i64>>(3)?.unwrap_or(0) as usize,
+                    end_line: r.get::<_, Option<i64>>(4)?.unwrap_or(0) as usize,
+                    ast_symbol: r.get::<_, Option<String>>(5)?,
+                })
+            });
+            Ok(row.ok())
+        })
+    }
+
+    /// Get all symbols in a file, sorted by line.
+    pub fn get_file_outline(
+        &self,
+        repo_root: &str,
+        file_path: &str,
+    ) -> Result<Vec<SymbolMatch>> {
+        self.with_conn(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT label, source_file, file_type, start_line, end_line, ast_symbol
+                 FROM code_graph_nodes
+                 WHERE repo_root = ?1 AND source_file = ?2 AND file_type LIKE 'ast:%'
+                 ORDER BY start_line"
+            )?;
+            let rows = stmt.query_map(rusqlite::params![repo_root, file_path], |r| {
+                Ok(SymbolMatch {
+                    label: r.get(0)?,
+                    source_file: r.get(1)?,
+                    file_type: r.get(2)?,
+                    start_line: r.get::<_, Option<i64>>(3)?.unwrap_or(0) as usize,
+                    end_line: r.get::<_, Option<i64>>(4)?.unwrap_or(0) as usize,
+                    ast_symbol: r.get::<_, Option<String>>(5)?,
+                })
+            })?;
+            Ok(rows.filter_map(|r| r.ok()).collect())
+        })
+    }
+
+    /// Find callers of a symbol via code_graph_edges with relation = 'calls'.
+    pub fn find_callers(
+        &self,
+        repo_root: &str,
+        symbol_name: &str,
+    ) -> Result<Vec<SymbolMatch>> {
+        self.with_conn(|conn| {
+            let mut stmt = conn.prepare(
+                r#"
+                SELECT n.label, n.source_file, n.file_type, n.start_line, n.end_line, n.ast_symbol
+                FROM code_graph_edges e
+                JOIN code_graph_nodes n ON n.repo_root = e.repo_root AND n.graphify_id = e.source_id
+                WHERE e.repo_root = ?1
+                  AND e.relation = 'calls'
+                  AND e.target_id IN (
+                    SELECT graphify_id FROM code_graph_nodes
+                    WHERE repo_root = ?1 AND (label LIKE ?2 OR label = ?3)
+                  )
+                LIMIT 50
+                "#,
+            )?;
+            let pattern = format!("%.{symbol_name}");
+            let rows = stmt.query_map(rusqlite::params![repo_root, pattern, pattern], |r| {
+                Ok(SymbolMatch {
+                    label: r.get(0)?,
+                    source_file: r.get(1)?,
+                    file_type: r.get(2)?,
+                    start_line: r.get::<_, Option<i64>>(3)?.unwrap_or(0) as usize,
+                    end_line: r.get::<_, Option<i64>>(4)?.unwrap_or(0) as usize,
+                    ast_symbol: r.get::<_, Option<String>>(5)?,
+                })
+            })?;
+            Ok(rows.filter_map(|r| r.ok()).collect())
+        })
+    }
+
+    /// Recursive BFS over edges starting from a symbol, up to `depth` hops.
+    pub fn get_local_graph(
+        &self,
+        repo_root: &str,
+        symbol_name: &str,
+        depth: usize,
+    ) -> Result<Vec<LocalGraphEdge>> {
+        use std::collections::{HashSet, VecDeque};
+        let max_depth = depth.min(5);
+        let mut visited = HashSet::new();
+        let mut queue = VecDeque::new();
+        let mut edges = Vec::new();
+
+        // Seed: find the graphify_id for this symbol
+        let seed_ids = self.with_conn(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT graphify_id FROM code_graph_nodes WHERE repo_root = ?1 AND (label LIKE ?2 OR label = ?3) LIMIT 10"
+            )?;
+            let pattern = format!("%.{symbol_name}");
+            let rows = stmt.query_map(rusqlite::params![repo_root, pattern, pattern], |r| {
+                r.get::<_, String>(0)
+            })?;
+            Ok::<Vec<String>, anyhow::Error>(rows.filter_map(|r| r.ok()).collect())
+        })?;
+
+        for sid in &seed_ids {
+            visited.insert(sid.clone());
+            queue.push_back((sid.clone(), 0));
+        }
+
+        while let Some((current, d)) = queue.pop_front() {
+            if d >= max_depth {
+                continue;
+            }
+            // Outgoing edges
+            let outgoing = self.with_conn(|conn| {
+                let mut stmt = conn.prepare(
+                    r#"
+                    SELECT e.source_id, e.target_id, e.relation,
+                           sn.label AS source_label, tn.label AS target_label
+                    FROM code_graph_edges e
+                    LEFT JOIN code_graph_nodes sn ON sn.repo_root = e.repo_root AND sn.graphify_id = e.source_id
+                    LEFT JOIN code_graph_nodes tn ON tn.repo_root = e.repo_root AND tn.graphify_id = e.target_id
+                    WHERE e.repo_root = ?1 AND e.source_id = ?2
+                    LIMIT 20
+                    "#
+                )?;
+                let rows = stmt.query_map(rusqlite::params![repo_root, current], |r| {
+                    Ok(LocalGraphEdge {
+                        source_id: r.get(0)?,
+                        target_id: r.get(1)?,
+                        relation: r.get(2)?,
+                        source_label: r.get(3)?,
+                        target_label: r.get(4)?,
+                    })
+                })?;
+                Ok::<Vec<LocalGraphEdge>, anyhow::Error>(rows.filter_map(|r| r.ok()).collect())
+            })?;
+            for e in &outgoing {
+                if visited.insert(e.target_id.clone()) {
+                    queue.push_back((e.target_id.clone(), d + 1));
+                }
+            }
+            edges.extend(outgoing);
+        }
+        Ok(edges)
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SymbolMatch {
+    pub label: String,
+    pub source_file: Option<String>,
+    pub file_type: Option<String>,
+    pub start_line: usize,
+    pub end_line: usize,
+    pub ast_symbol: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct LocalGraphEdge {
+    pub source_id: String,
+    pub target_id: String,
+    pub relation: String,
+    pub source_label: Option<String>,
+    pub target_label: Option<String>,
 }
 
 #[cfg(test)]
