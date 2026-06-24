@@ -328,6 +328,61 @@ fn default_node_tokens() -> usize {
     300
 }
 
+// ── KG Phase 2: symbol navigation params ────────────────
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct SearchSymbolsParams {
+    query: String,
+    #[serde(default)]
+    language: Option<String>,
+    #[serde(default)]
+    file: Option<String>,
+    #[serde(default = "default_symbol_limit")]
+    limit: usize,
+    #[serde(default)]
+    current_working_directory: Option<String>,
+}
+
+fn default_symbol_limit() -> usize {
+    20
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct GetSymbolDefinitionParams {
+    name: String,
+    #[serde(default)]
+    file: Option<String>,
+    #[serde(default)]
+    current_working_directory: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct GetFileOutlineParams {
+    path: String,
+    #[serde(default)]
+    current_working_directory: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct FindCallersParams {
+    name: String,
+    #[serde(default)]
+    current_working_directory: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct GetLocalGraphParams {
+    name: String,
+    #[serde(default = "default_graph_depth")]
+    depth: usize,
+    #[serde(default)]
+    current_working_directory: Option<String>,
+}
+
+fn default_graph_depth() -> usize {
+    2
+}
+
 #[tool_router]
 impl BrainMcp {
     #[tool(
@@ -926,6 +981,98 @@ impl BrainMcp {
         ) {
             tracing::warn!(error = %err, tool = tool_name, "tool_log write failed");
         }
+    }
+
+    // ── KG Phase 2: symbol navigation tools ────────────────
+
+    #[tool(description = "Search code symbols by name across the current repo. Optionally filter by language or file. Results are ranked by label similarity.")]
+    async fn search_symbols(
+        &self,
+        params: Parameters<SearchSymbolsParams>,
+    ) -> Result<CallToolResult, McpError> {
+        self.require_route("search_symbols")?;
+        let _req = self.engine.mcp_activity.begin_request();
+        let p = params.0;
+        let path = resolve_graphify_repo(p.current_working_directory.as_deref())?;
+        let repo_root = path.display().to_string();
+        let results = self
+            .engine
+            .store
+            .search_symbols(&repo_root, &p.query, p.language.as_deref(), p.file.as_deref(), p.limit)
+            .map_err(|e| McpError::internal_error(format!("{e}"), None))?;
+        json_result(results)
+    }
+
+    #[tool(description = "Get the full definition (source + docstring) of a named symbol. Optionally scope to a file.")]
+    async fn get_symbol_definition(
+        &self,
+        params: Parameters<GetSymbolDefinitionParams>,
+    ) -> Result<CallToolResult, McpError> {
+        self.require_route("get_symbol_definition")?;
+        let _req = self.engine.mcp_activity.begin_request();
+        let p = params.0;
+        let path = resolve_graphify_repo(p.current_working_directory.as_deref())?;
+        let repo_root = path.display().to_string();
+        let result = self
+            .engine
+            .store
+            .get_symbol_definition(&repo_root, &p.name, p.file.as_deref())
+            .map_err(|e| McpError::internal_error(format!("{e}"), None))?;
+        json_result(result)
+    }
+
+    #[tool(description = "Get all symbols defined in a file, sorted by start line. Returns label, kind, lines, and source for each symbol.")]
+    async fn get_file_outline(
+        &self,
+        params: Parameters<GetFileOutlineParams>,
+    ) -> Result<CallToolResult, McpError> {
+        self.require_route("get_file_outline")?;
+        let _req = self.engine.mcp_activity.begin_request();
+        let p = params.0;
+        let path = resolve_graphify_repo(p.current_working_directory.as_deref())?;
+        let repo_root = path.display().to_string();
+        let results = self
+            .engine
+            .store
+            .get_file_outline(&repo_root, &p.path)
+            .map_err(|e| McpError::internal_error(format!("{e}"), None))?;
+        json_result(results)
+    }
+
+    #[tool(description = "Find all callers of a named symbol. Returns caller symbols with source locations.")]
+    async fn find_callers(
+        &self,
+        params: Parameters<FindCallersParams>,
+    ) -> Result<CallToolResult, McpError> {
+        self.require_route("find_callers")?;
+        let _req = self.engine.mcp_activity.begin_request();
+        let p = params.0;
+        let path = resolve_graphify_repo(p.current_working_directory.as_deref())?;
+        let repo_root = path.display().to_string();
+        let results = self
+            .engine
+            .store
+            .find_callers(&repo_root, &p.name)
+            .map_err(|e| McpError::internal_error(format!("{e}"), None))?;
+        json_result(results)
+    }
+
+    #[tool(description = "Explore the local dependency graph around a symbol via BFS over code_graph_edges. Depth defaults to 2 hops (max 5).")]
+    async fn get_local_graph(
+        &self,
+        params: Parameters<GetLocalGraphParams>,
+    ) -> Result<CallToolResult, McpError> {
+        self.require_route("get_local_graph")?;
+        let _req = self.engine.mcp_activity.begin_request();
+        let p = params.0;
+        let path = resolve_graphify_repo(p.current_working_directory.as_deref())?;
+        let repo_root = path.display().to_string();
+        let results = self
+            .engine
+            .store
+            .get_local_graph(&repo_root, &p.name, p.depth)
+            .map_err(|e| McpError::internal_error(format!("{e}"), None))?;
+        json_result(results)
     }
 }
 
