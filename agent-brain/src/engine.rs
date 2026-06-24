@@ -37,6 +37,8 @@ pub struct Engine {
     pub query_emb_cache: Arc<QueryEmbeddingCache>,
     pub mcp_activity: Arc<McpActivity>,
     prev_briefing: Mutex<Option<String>>,
+    touched_files: Mutex<Vec<String>>,
+    prev_tool_names: Mutex<Vec<String>>,
     write_queue: WriteQueue,
 }
 
@@ -72,6 +74,8 @@ impl Engine {
             query_emb_cache: Arc::new(QueryEmbeddingCache::new(128)),
             mcp_activity: Arc::new(McpActivity::new()),
             prev_briefing: Mutex::new(None),
+            touched_files: Mutex::new(Vec::new()),
+            prev_tool_names: Mutex::new(Vec::new()),
             write_queue,
         })
     }
@@ -110,6 +114,8 @@ impl Engine {
             query_emb_cache: Arc::new(QueryEmbeddingCache::new(128)),
             mcp_activity: Arc::new(McpActivity::new()),
             prev_briefing: Mutex::new(None),
+            touched_files: Mutex::new(Vec::new()),
+            prev_tool_names: Mutex::new(Vec::new()),
             write_queue,
         })
     }
@@ -464,6 +470,25 @@ impl Engine {
         ))
     }
 
+    /// Record that a file was accessed by an MCP tool, for auto-capture at next route_task.
+    pub fn record_file_access(&self, tool: &str, path: &str) {
+        if !self.config.auto_capture_enabled {
+            return;
+        }
+        if let Ok(mut f) = self.touched_files.lock() {
+            let p = path.to_string();
+            if !f.contains(&p) {
+                f.push(p);
+            }
+        }
+        if let Ok(mut t) = self.prev_tool_names.lock() {
+            let n = tool.to_string();
+            if !t.contains(&n) {
+                t.push(n);
+            }
+        }
+    }
+
     /// Per-phase TTL for route cache. Debugging and verification are shorter-lived;
     /// architecture and review can cache longer since those artifacts change slowly.
     fn phase_ttl(&self, phase: &str) -> Duration {
@@ -495,7 +520,20 @@ impl Engine {
             if let Ok(prev) = self.prev_briefing.lock() {
                 if let Some(ref briefing) = *prev {
                     if !briefing.is_empty() {
-                        let fact = format!("Worked on: {briefing}");
+                        let files = self.touched_files.lock().ok().map(|f| f.clone()).unwrap_or_default();
+                        let tools = self.prev_tool_names.lock().ok().map(|t| t.clone()).unwrap_or_default();
+                        let mut extras = Vec::new();
+                        if !tools.is_empty() {
+                            extras.push(format!("tools: {}", tools.join(", ")));
+                        }
+                        if !files.is_empty() {
+                            extras.push(format!("files: {}", files.join(", ")));
+                        }
+                        let fact = if extras.is_empty() {
+                            format!("Worked on: {briefing}")
+                        } else {
+                            format!("Worked on: {briefing} ({})", extras.join("; "))
+                        };
                         let _ = self.write_queue.send(crate::db::WriteOp::StoreMemory {
                             resp_tx: std::sync::mpsc::channel().0,
                             payload: crate::db::write_queue::store_memory_payload::StoreMemoryRequest {
@@ -512,6 +550,13 @@ impl Engine {
                         });
                     }
                 }
+            }
+            // Clear turn-local buffers after auto-store
+            if let Ok(mut f) = self.touched_files.lock() {
+                f.clear();
+            }
+            if let Ok(mut t) = self.prev_tool_names.lock() {
+                t.clear();
             }
         }
 
