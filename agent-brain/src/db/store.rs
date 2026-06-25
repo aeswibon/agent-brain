@@ -2222,7 +2222,15 @@ impl BrainStore {
             .memories
             .iter()
             .filter(|row| {
-                !crate::workspace::is_low_signal_memory(&row.topic, row.source.as_deref())
+                if crate::workspace::is_low_signal_memory(&row.topic, row.source.as_deref()) {
+                    let lex =
+                        crate::retrieval::lexical_overlap_score(query, &row.topic, &row.text);
+                    let ent =
+                        crate::retrieval::entity_overlap_score(query, &row.topic, &row.text);
+                    lex >= 0.15 || ent >= 0.15
+                } else {
+                    true
+                }
             })
             .collect();
         extra_memories.sort_by_key(|row| std::cmp::Reverse(row.updated_at));
@@ -2235,7 +2243,7 @@ impl BrainStore {
         let candidate_count = candidates.len();
         let candidate_ids: Vec<String> = candidates.iter().map(|r| r.id.clone()).collect();
         let context_weights = self.load_context_weights(&candidate_ids)?;
-        let useful_counts = self.load_useful_counts(&candidate_ids)?;
+        let retrieval_stats = self.load_retrieval_stats(&candidate_ids)?;
         let now_ms = chrono::Utc::now().timestamp_millis();
 
         let cosine_sims: Vec<f64> = if bm25_only || query_embedding.is_empty() {
@@ -2346,7 +2354,11 @@ impl BrainStore {
                     }
                 }
 
-                let useful = useful_counts.get(&row.id).copied().unwrap_or(0);
+                let (useful, useless) = retrieval_stats
+                    .get(&row.id)
+                    .copied()
+                    .unwrap_or((0, 0));
+                score *= feedback_multiplier(useful, useless);
                 score *= crate::memory_decay::ebbinghaus_multiplier(
                     row.updated_at,
                     confidence,
@@ -2439,6 +2451,9 @@ fn memory_fact_meta<'a>(
 
 fn memory_source_score_adjustment(source: Option<&str>, topic: &str) -> f64 {
     if crate::workspace::is_low_signal_memory(topic, source) {
+        if topic.starts_with("session-digest-") || source == Some("session_digest") {
+            return -0.10;
+        }
         return -0.30;
     }
     0.0
@@ -2790,4 +2805,23 @@ pub fn looks_like_secret(text: &str) -> bool {
             .unwrap_or(false)
     }) || text.contains(".env")
         || text.contains(".pem")
+}
+
+/// Feedback multiplier from `report_context_useful` stats.
+///
+/// - If `useless_count >= 3` and exceeds `useful_count` by ≥2: penalty (0.5×).
+/// - If `useful_count >= 3` and `useless_count == 0`: modest boost (1.15×).
+/// - Otherwise: neutral (1.0×).
+#[must_use]
+fn feedback_multiplier(useful_count: u32, useless_count: u32) -> f64 {
+    let i_useless = i64::from(useless_count);
+    let i_useful = i64::from(useful_count);
+
+    if useless_count >= 3 && i_useless - i_useful >= 2 {
+        0.5
+    } else if useful_count >= 3 && useless_count == 0 {
+        1.15
+    } else {
+        1.0
+    }
 }
