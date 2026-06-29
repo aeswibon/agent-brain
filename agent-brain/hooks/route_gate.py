@@ -21,7 +21,12 @@ ROUTE_TOOL_NAMES = {
     "mcp:route_task",
     "mcp_agent-brain_route_task",
     "mcp__agent-brain__route_task",
+    "agent-brain_route_task",
+    "agent_brain_route_task",
 }
+
+# OpenCode exposes MCP tools as agent-brain_<tool> (no mcp_ prefix).
+OPENCODE_BRAIN_PREFIXES = ("agent-brain_", "agent_brain_")
 
 GRACE_SECS = float(os.environ.get("AGENT_BRAIN_ROUTE_GRACE_SECS", "120"))
 STALE_ROUTE_SECS = float(os.environ.get("AGENT_BRAIN_ROUTE_STALE_SECS", "45"))
@@ -70,6 +75,11 @@ def is_claude_agent_brain_mcp(tool_name: str) -> bool:
         return False
     normalized = server.lower().replace("_", "-")
     return normalized in {"agent-brain", "agentbrain"}
+
+
+def is_opencode_brain_tool(tool: str) -> bool:
+    tool_lower = tool.lower()
+    return any(tool_lower.startswith(prefix) for prefix in OPENCODE_BRAIN_PREFIXES)
 
 
 def is_agent_brain_command(event: dict) -> bool:
@@ -122,6 +132,8 @@ def is_agent_brain_mcp_tool(event: dict) -> bool:
         return False
     tool = str(event.get("tool_name") or "").strip()
     tool_lower = tool.lower()
+    if is_opencode_brain_tool(tool):
+        return True
     if is_claude_agent_brain_mcp(tool):
         return True
     if tool_lower.startswith("mcp_agent-brain_"):

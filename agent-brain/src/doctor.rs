@@ -215,6 +215,64 @@ pub fn run(fix: bool) -> Result<()> {
         claude_step.done();
     }
 
+    let multi_host_step = progress.step("Multi-host route gates");
+    let opencode_detail = opencode_integration_detail(&home);
+    let opencode_ok = opencode_detail.starts_with("OK");
+    let codex_hooks_path = home.join(".codex/hooks.json");
+    let gemini_settings = home.join(".gemini/settings.json");
+    let codex_hooks_ok = crate::host_hooks::hooks_status(&codex_hooks_path, "route_gate.py") == "OK";
+    let gemini_hooks_ok =
+        crate::host_hooks::hooks_status(&gemini_settings, "route_gate.py") == "OK";
+    println!("  opencode integration:  {opencode_detail}");
+    println!(
+        "  codex hooks:           {}",
+        if codex_hooks_ok {
+            "OK"
+        } else {
+            crate::host_hooks::hooks_status(&codex_hooks_path, "route_gate.py")
+        }
+    );
+    println!(
+        "  gemini hooks:          {}",
+        if gemini_hooks_ok {
+            "OK"
+        } else {
+            crate::host_hooks::hooks_status(&gemini_settings, "route_gate.py")
+        }
+    );
+    if !opencode_ok || !codex_hooks_ok || !gemini_hooks_ok {
+        ok = false;
+        if fix {
+            if !opencode_ok {
+                let _ = crate::host_hooks::install_opencode_hooks(true, false);
+                let _ = crate::host_install::install_host(
+                    crate::host_install::HostTarget::OpenCode { user: true },
+                    &exe,
+                    true,
+                );
+                println!("  opencode integration:  reinstalled");
+            }
+            if !codex_hooks_ok {
+                let _ = crate::host_hooks::install_codex_hooks(true, false);
+                println!("  codex hooks:           reinstalled");
+            }
+            if !gemini_hooks_ok {
+                let _ = crate::host_hooks::install_gemini_hooks(
+                    true,
+                    &gemini_settings,
+                    false,
+                );
+                println!("  gemini hooks:          reinstalled");
+            }
+            ok = true;
+            multi_host_step.done();
+        } else {
+            multi_host_step.warn("OpenCode/Codex/Gemini route gates incomplete");
+        }
+    } else {
+        multi_host_step.done();
+    }
+
     let sign_step = progress.step("macOS codesign & quarantine");
     let mut sign_targets = vec![exe.clone()];
     if let Some(cmd) = mcp_binary.clone() {

@@ -18,22 +18,83 @@ function routeGateScript(): string | null {
   return null;
 }
 
+function isRouteTask(tool: string): boolean {
+  const t = tool.toLowerCase();
+  return (
+    t === "route_task" ||
+    t.endsWith("_route_task") ||
+    t.endsWith(":route_task") ||
+    (t.includes("route_task") &&
+      (t.includes("agent-brain") || t.includes("agent_brain")))
+  );
+}
+
+function isAgentBrainTool(tool: string): boolean {
+  const t = tool.toLowerCase();
+  if (isRouteTask(tool)) return true;
+  return (
+    t.startsWith("agent-brain_") ||
+    t.startsWith("agent_brain_") ||
+    t.startsWith("mcp_agent-brain_") ||
+    t.startsWith("mcp_agent_brain_") ||
+    t.startsWith("mcp__agent-brain__") ||
+    t.startsWith("mcp__agent_brain__") ||
+    (t.includes("agent-brain") && t.includes("mcp")) ||
+    (t.includes("agent_brain") && t.includes("mcp"))
+  );
+}
+
+function gateMissingPayload(tool: string): Record<string, unknown> {
+  return {
+    permission: "deny",
+    agent_message:
+      "agent-brain route gate script missing. Run: agent-brain install --opencode --global",
+  };
+}
+
+function gateErrorPayload(message: string): Record<string, unknown> {
+  return {
+    permission: "deny",
+    agent_message: `agent-brain route gate error: ${message}`,
+  };
+}
+
 function runGate(event: Record<string, unknown>): Record<string, unknown> {
+  const tool = String(event.tool_name ?? "");
+  const brainTool = isAgentBrainTool(tool);
   const script = routeGateScript();
-  if (!script) return { permission: "allow" };
+
+  if (!script) {
+    if (brainTool && !isRouteTask(tool)) {
+      return gateMissingPayload(tool);
+    }
+    return { permission: "allow" };
+  }
+
   const res = spawnSync("python3", [script], {
-    input: JSON.stringify(event),
+    input: JSON.stringify({
+      server: "agent-brain",
+      ...event,
+    }),
     encoding: "utf-8",
     timeout: 25_000,
   });
+
   if (res.error) {
+    if (brainTool && !isRouteTask(tool)) {
+      return gateErrorPayload(res.error.message ?? "python3 failed");
+    }
     return { permission: "allow" };
   }
+
   const out = (res.stdout || "").trim();
   if (!out) return {};
   try {
     return JSON.parse(out) as Record<string, unknown>;
   } catch {
+    if (brainTool && !isRouteTask(tool)) {
+      return gateErrorPayload("invalid JSON from route_gate.py");
+    }
     return {};
   }
 }
@@ -65,10 +126,26 @@ export const AgentBrainRouteGate = async () => {
         hook_event_name: "PreToolUse",
         tool_name: input.tool,
         tool_input: output.args,
+        session_id: input.sessionID,
+        call_id: input.callID,
       });
       if (gateDenied(out)) {
         throw new Error(denyMessage(out));
       }
+    },
+    "tool.execute.after": async (
+      input: { tool: string; sessionID?: string; callID?: string },
+      output: { args?: Record<string, unknown>; error?: unknown },
+    ) => {
+      runGate({
+        hook_event_name: "PostToolUse",
+        tool_name: input.tool,
+        tool_input: output.args ?? {},
+        server: "agent-brain",
+        success: output.error == null,
+        session_id: input.sessionID,
+        call_id: input.callID,
+      });
     },
     "chat.message": async (
       input: { role?: string },
