@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`suggested_tools`** — agent-body gateway tools score higher on MCP host tasks; fallback suggestions when keyword match is empty
 - **`infer_phase`** — MCP registration failures (`tools not working`, empty schema) map to `debugging`
 - **`agent_boost_keywords`** — includes `mcp` for embedding boost
+- **Install-time dual MCP** — `agent-brain install` adds `agent-body serve-mcp` to Cursor `mcp.json` and OpenCode `mcp` when binary is on PATH
+- **`doctor --mcp`** — audits agent-body `tools/list` JSON Schema; federation checks in `doctor`
+- **`@mcp-health-check` workflow** — spine preset for gateway audit → probe → route_task verify
 
 ## [0.33.2] - 2026-06-29
 
