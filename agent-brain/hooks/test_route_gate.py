@@ -22,6 +22,7 @@ from route_gate import (
     handle_pre_tool_use,
     in_grace_period,
     in_mcp_offline,
+    is_agent_brain_mcp_tool,
     is_route_task,
     check_read_tool_gate,
     load_state,
@@ -179,9 +180,20 @@ class RouteGateTests(unittest.TestCase):
         for tool_name in (
             "mcp_agent-brain_store_memory",
             "mcp__agent-brain__store_memory",
+            "agent-brain_store_memory",
+            "agent_brain_grep_search",
         ):
             out = handle_pre_tool_use({"tool_name": tool_name})
             self.assertEqual(out.get("permission"), "deny", tool_name)
+
+    def test_opencode_route_task_name(self) -> None:
+        self.assertTrue(is_route_task({"tool_name": "agent-brain_route_task"}))
+        self.assertTrue(
+            is_agent_brain_mcp_tool({"tool_name": "agent-brain_store_memory"}),
+        )
+        self.assertFalse(
+            is_agent_brain_mcp_tool({"tool_name": "agent-brain_route_task"}),
+        )
 
     def test_claude_route_task_name(self) -> None:
         self.assertTrue(

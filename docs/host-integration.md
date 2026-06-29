@@ -120,12 +120,14 @@ Readable route summary: `~/.agent_brain/logs/last-route.md` or `agent-brain brie
 | **Cursor** | Yes | `~/.cursor/hooks.json` → `route_gate.py` (installed by `install --global`) |
 | **Claude Code** | Yes (agent-brain MCP) | `.claude/settings.json` → `route_gate.py` on `UserPromptSubmit` + `mcp__agent-brain__.*` (installed by `install --claude-code [--global]`) |
 | **Codex** | Yes (agent-brain MCP) | `~/.codex/hooks.json` → `route_gate.py` (installed by `install --codex --global`) |
-| **OpenCode** | Plugin | `~/.config/opencode/plugin/agent-brain-route-gate.ts` (installed by `install --opencode [--global]`) |
+| **OpenCode** | Plugin (agent-brain MCP) | `~/.config/opencode/plugin/agent-brain-route-gate.ts` — blocks `agent-brain_*` tools; fail-closed if gate script missing (installed by `install --opencode [--global]`) |
 | **VS Code** | Rule-only | Add Copilot/custom instructions (see below) |
 | **Claude Desktop** | Rule-only | Paste rule into project/system instructions |
 | **Windsurf / Zed / other** | Manual | Copy `mcpServers` block; add equivalent rule text |
 
-Cursor has the strongest host-tool gate (hooks on Read/Shell). Claude Code and Codex enforce **agent-brain MCP tools** until `route_task` via PreToolUse hooks. Other hosts rely on rules/instructions plus operator discipline.
+Cursor has the strongest host-tool gate (hooks on Read/Shell). Claude Code, Codex, Gemini, and OpenCode enforce **agent-brain MCP tools** until `route_task` via hooks/plugins. VS Code and Claude Desktop rely on rules/instructions plus operator discipline.
+
+Reinstall all hosts: `agent-brain install --all --global` or `agent-brain doctor --fix`.
 
 ### VS Code instructions snippet
 
@@ -138,6 +140,13 @@ At the start of every user turn, call the `route_task` MCP tool on server `agent
 with `user_message`, `current_working_directory`, and `open_files`. Apply returned
 skills, rules, and memory. At task end, call `store_memory` for durable outcomes.
 ```
+
+### OpenCode gotchas
+
+- Tool names are `agent-brain_<tool>` (not `mcp_agent-brain_*`). The route gate plugin and `route_gate.py` recognize both forms.
+- If the plugin cannot find `route_gate.py`, **agent-brain tools are denied** until you run `agent-brain install --opencode --global`.
+- Ensure `plugin` array in `opencode.json` includes `agent-brain-route-gate`.
+- Restart OpenCode after install so the plugin reloads.
 
 ## Claude Code gotchas
 
