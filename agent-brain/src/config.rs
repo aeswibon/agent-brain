@@ -36,7 +36,7 @@ pub struct Config {
     pub ann_min_index: usize,
     pub ann_top_k: usize,
     pub workflow_dirs: Vec<PathBuf>,
-    /// Write human-readable route summary to ~/.agent_brain/logs/last-route.md
+    /// Write human-readable route summary to ~/.autonomic/memory/logs/last-route.md
     pub route_briefing_enabled: bool,
     /// One-line route summary on stderr (visible in Cursor MCP output)
     pub route_briefing_stderr: bool,

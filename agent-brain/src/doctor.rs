@@ -31,6 +31,7 @@ pub fn run(fix: bool) -> Result<()> {
     println!("agent-brain doctor\n");
     println!("  version (this binary): {version}");
     println!("  binary path:           {}", exe.display());
+    println!("  memory store:          {}", config.db_path.display());
 
     let mut ok = true;
 
@@ -272,6 +273,15 @@ pub fn run(fix: bool) -> Result<()> {
     } else {
         multi_host_step.done();
     }
+    if !opencode_ok || !codex_hooks_ok || !gemini_hooks_ok || claude_hooks != "OK" {
+        println!();
+        println!(
+            "  Cross-host enforcement: partial — run `agent-brain install --all --global` (or doctor --fix)"
+        );
+        println!(
+            "  VS Code / Claude Desktop: instruction files only (no deny hooks on those hosts)"
+        );
+    }
 
     let sign_step = progress.step("macOS codesign & quarantine");
     let mut sign_targets = vec![exe.clone()];
@@ -428,12 +438,15 @@ pub fn run(fix: bool) -> Result<()> {
     }
     if fix {
         bootstrap_registry_bundles(&config)?;
-        if let Ok((indexed, sessions)) = (|| {
+        if let Ok((indexed, sessions, total)) = (|| {
             let engine = crate::engine::Engine::new(config.clone())?;
-            engine.post_install_warmup()
+            let (indexed, sessions) = engine.post_install_warmup()?;
+            let total = engine.store.count_indexed_items()?;
+            Ok::<_, anyhow::Error>((indexed, sessions, total))
         })() {
             println!(
-                "  post-fix index:        {indexed} items · {sessions} session digests ingested"
+                "  post-fix index:        {} · {sessions} session digests ingested",
+                crate::install::format_new_index_count(indexed, total)
             );
         }
     }

@@ -12,7 +12,7 @@ After that, **you do not run `serve` or `index` daily.** Cursor starts the MCP s
 
 The **agent** (not you) calls `route_task` every turn and `store_memory` at task end.
 
-**Enforcement (Cursor):** `install --global` installs hooks that **block** Shell/Read/Write/MCP tools until `route_task` succeeds each user message. Rules + MCP instructions are backup; hooks are the hard gate.
+**Enforcement (Cursor):** `install --global` installs hooks that **block agent-brain MCP tools** until `route_task` succeeds each user message (default scope `brain_mcp`). Native Shell/Read/Grep keep working if MCP is down. Rules + MCP instructions are backup; hooks are the hard gate.
 
 > Disable hooks only for debugging: `AGENT_BRAIN_ROUTE_HOOKS=0` in MCP env or shell.
 
@@ -207,9 +207,11 @@ Packages live at `~/.agent_brain/packages/<name>/`.
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `AGENT_BRAIN_HOME` | `~/.agent_brain` | Data, packages, database |
+| `AGENT_BRAIN_HOME` | `~/.autonomic/memory` | Brain data dir (legacy `~/.agent_brain` migrated on first run) |
 | `AGENT_BRAIN_SESSION_INGEST` | `1` (on) | Set `0` or `false` to disable legacy session import |
 | `AGENT_BRAIN_ROUTE_HOOKS` | `1` (on) | Set `0` to disable Cursor route_task gate hooks |
+| `AGENT_BRAIN_ROUTE_GATE_SCOPE` | `brain_mcp` | `brain_mcp` = gate agent-brain MCP only; `all` = legacy strict |
+| `AGENT_BRAIN_READ_GATE` | `hard` | `hard` = deny large/blocked native Read; `steer` = warn only; `off` = disable |
 | `RUST_LOG` | `agent_brain=info` | Log level (stderr only) |
 
 ## Cursor hooks (enforcement)
@@ -222,10 +224,12 @@ Packages live at `~/.agent_brain/packages/<name>/`.
 **Behavior each user message:**
 
 1. `beforeSubmitPrompt` marks the turn as needing `route_task`
-2. `preToolUse` / `beforeMCPExecution` **deny** Shell, Read, Write, and other MCP tools until `route_task` runs
-3. `afterMCPExecution` clears the gate when agent-brain `route_task` succeeds
+2. `preToolUse` / `beforeMCPExecution` **deny agent-brain MCP tools** until `route_task` runs (set `AGENT_BRAIN_ROUTE_GATE_SCOPE=all` for legacy strict mode that gates every tool)
+3. `afterMCPExecution` / `postToolUse` clears the gate when agent-brain `route_task` succeeds
 
 Verify under **Settings → Hooks** and the **Hooks** output channel. Requires `python3` on PATH.
+
+**Non-Cursor hosts:** run `agent-brain install --claude-code --global`, `--opencode --global`, `--codex --global`, or `install --all --global` for route gate hooks/plugins. VS Code and Claude Desktop rely on instruction files — verify with `agent-brain doctor`.
 
 Other hosts (Claude, Codex): hooks not installed yet — use MCP config + host rules for now.
 

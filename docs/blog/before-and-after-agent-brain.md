@@ -27,7 +27,7 @@ You index **2000 real skills** from [skills.sh](https://skills.sh) (committed `f
 
 | What happens | Cost |
 |--------------|------|
-| Hooks block Shell/Read until `route_task` succeeds | Hard gate — not optional |
+| Hooks block agent-brain MCP until `route_task` succeeds; large native Read steered to brain tools | Hard gate — not optional |
 | Hybrid BM25 + embeddings rank **top 3 skills** under **500 token budget** | **~477 routed tokens** typical |
 | **~99% fewer tokens** vs naive full-index load (see `agent-brain briefing`) | Faster, cleaner reasoning window |
 | `store_memory` persists “Vitest not Jest” for future test-related prompts | Durable conventions |
