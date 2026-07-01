@@ -97,15 +97,22 @@ pub fn run(target: HostTarget, print_only: bool, reload: bool) -> Result<()> {
     Ok(())
 }
 
+/// User-facing label for sync_index / post_install_warmup counts.
+pub fn format_new_index_count(new_items: usize, total_items: usize) -> String {
+    format!("{new_items} new items ({total_items} total)")
+}
+
 /// Index skills/rules and ingest Cursor/OpenCode/Codex/Gemini session digests into brain.db.
 pub fn run_post_install_warmup(quiet: bool) -> Result<()> {
     let config = crate::config::Config::load()?;
     config.ensure_dirs()?;
     let engine = crate::engine::Engine::new(config)?;
     let (indexed, sessions) = engine.post_install_warmup()?;
+    let total = engine.store.count_indexed_items()?;
     if !quiet {
         println!(
-            "Post-install brain: indexed {indexed} items · ingested {sessions} session digests (cursor/opencode/codex/gemini)"
+            "Post-install brain: indexed {} · ingested {sessions} session digests (cursor/opencode/codex/gemini)",
+            format_new_index_count(indexed, total)
         );
     }
     Ok(())
@@ -436,13 +443,13 @@ If agent-brain MCP tools are unavailable, set `AGENT_BRAIN_ROUTE_HOOKS=0` and pr
 
 ## User visibility (no need to expand MCP JSON)
 
-Each `route_task` writes a readable summary to **`~/.agent_brain/logs/last-route.md`**. The user can run **`agent-brain briefing`** in a terminal or watch the MCP output panel for a one-line stderr summary. The JSON field **`briefing`** is a short one-liner; full detail is in the file.
+Each `route_task` writes a readable summary to **`~/.autonomic/memory/logs/last-route.md`**. The user can run **`agent-brain briefing`** in a terminal or watch the MCP output panel for a one-line stderr summary. The JSON field **`briefing`** is a short one-liner; full detail is in the file.
 
 ## macOS
 
 Linker-signed local builds are killed by taskgated when Cursor launches MCP. Use **`make release-macos`**, **`agent-brain doctor --fix`**, or the GitHub release binary at `~/.local/bin/agent-brain`.
 
-**Hooks enforce this:** Cursor blocks other tools until `route_task` succeeds each turn.
+**Hooks enforce this:** Cursor blocks **agent-brain MCP tools** until `route_task` succeeds each turn (default `brain_mcp` scope). Large native `Read` calls are blocked in favor of bounded brain tools.
 "#;
 
 pub fn mcp_config_path(global: bool) -> Result<PathBuf> {
@@ -466,7 +473,9 @@ pub fn mcp_server_entry(exe: &Path) -> Value {
         "env": {
             "RUST_LOG": "agent_brain=info",
             "FASTEMBED_CACHE_DIR": cache_dir.display().to_string(),
-            "AGENT_BRAIN_BUILD": build_id
+            "AGENT_BRAIN_BUILD": build_id,
+            "AGENT_BRAIN_ROUTE_GATE_SCOPE": "brain_mcp",
+            "AGENT_BRAIN_READ_GATE": "hard"
         }
     })
 }

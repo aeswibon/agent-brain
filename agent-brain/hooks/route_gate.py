@@ -9,11 +9,18 @@ import sys
 import time
 from pathlib import Path
 
-STATE_PATH = (
-    Path(os.environ.get("AGENT_BRAIN_HOME", Path.home() / ".agent_brain"))
-    / "hooks"
-    / "route_state.json"
-)
+def default_brain_home() -> Path:
+    explicit = os.environ.get("AGENT_BRAIN_HOME", "").strip()
+    if explicit:
+        return Path(explicit).expanduser()
+    autonomic = Path.home() / ".autonomic" / "memory"
+    legacy = Path.home() / ".agent_brain"
+    if (autonomic / "brain.db").exists() or not legacy.exists():
+        return autonomic
+    return legacy
+
+
+STATE_PATH = default_brain_home() / "hooks" / "route_state.json"
 
 ROUTE_TOOL_NAMES = {
     "route_task",
@@ -33,7 +40,7 @@ STALE_ROUTE_SECS = float(os.environ.get("AGENT_BRAIN_ROUTE_STALE_SECS", "45"))
 OFFLINE_SECS = float(os.environ.get("AGENT_BRAIN_ROUTE_OFFLINE_SECS", "1800"))
 # brain_mcp = gate only agent-brain MCP tools; all = gate every tool (legacy strict mode).
 GATE_SCOPE = os.environ.get("AGENT_BRAIN_ROUTE_GATE_SCOPE", "brain_mcp").strip().lower()
-READ_GATE_MODE = os.environ.get("AGENT_BRAIN_READ_GATE", "steer").strip().lower()
+READ_GATE_MODE = os.environ.get("AGENT_BRAIN_READ_GATE", "hard").strip().lower()
 READ_WARN_BYTES = int(os.environ.get("AGENT_BRAIN_READ_WARN_BYTES", "65536"))
 BLOCKED_PATH_SEGMENTS = ("dist", "node_modules", "target", "build", ".git", ".next", "coverage")
 TOOL_EVENTS_PATH = STATE_PATH.parent / "tool_events.jsonl"
@@ -481,14 +488,18 @@ def check_read_tool_gate(event: dict) -> dict | None:
                 "phase": state.get("route_phase"),
             }
         )
-        if READ_GATE_MODE == "hard" and must_apply:
+        if READ_GATE_MODE == "hard":
+            detail = (
+                "must_apply constraints are active"
+                if must_apply
+                else f"file exceeds {READ_WARN_BYTES} bytes"
+            )
             return {
                 "permission": "deny",
                 "agent_message": (
-                    f"Read denied while must_apply constraints are active. Use agent-brain "
-                    f"{tool_hint} first."
+                    f"Read denied ({detail}). Use agent-brain {tool_hint} instead."
                 ),
-                "user_message": "agent-brain: must_apply — use bounded reads.",
+                "user_message": "agent-brain: use bounded reads (grep_search, file_summary).",
             }
         return {
             "permission": "allow",

@@ -34,7 +34,11 @@ async fn main() -> Result<()> {
                 engine.spawn_bootstrap(None);
             } else {
                 let n = engine.bootstrap(None)?;
-                tracing::info!("indexed {n} items");
+                let total = engine.store.count_indexed_items().unwrap_or(0);
+                tracing::info!(
+                    "indexed {}",
+                    install::format_new_index_count(n, total)
+                );
             }
             if brain_settings.auto_update.enabled {
                 engine.spawn_auto_update();
@@ -63,7 +67,11 @@ async fn main() -> Result<()> {
                 engine.spawn_bootstrap(None);
             } else {
                 let n = engine.bootstrap(None)?;
-                tracing::info!("indexed {n} items");
+                let total = engine.store.count_indexed_items().unwrap_or(0);
+                tracing::info!(
+                    "indexed {}",
+                    install::format_new_index_count(n, total)
+                );
             }
             grpc::serve(engine, addr).await?;
         }
@@ -83,7 +91,11 @@ async fn main() -> Result<()> {
                 changed_only,
                 !no_ast,
             )?;
-            println!("Indexed {n} items");
+            let total = engine.store.count_indexed_items()?;
+            println!(
+                "Indexed {}",
+                install::format_new_index_count(n, total)
+            );
         }
         "add" => {
             let source = args

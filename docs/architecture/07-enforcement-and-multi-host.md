@@ -15,7 +15,7 @@ Installed by `agent-brain install --global` into `~/.cursor/hooks.json`:
 | `beforeMCPExecution` | Track `route_task` success / failure |
 | `preToolUse` | Deny tools until routed for current user turn |
 
-State persisted in `~/.agent_brain/hooks/route_state.json`.
+State persisted in `~/.autonomic/memory/hooks/route_state.json` (legacy: `~/.agent_brain/hooks/`).
 
 ### Gate scope (`AGENT_BRAIN_ROUTE_GATE_SCOPE`)
 
@@ -98,7 +98,7 @@ PE implication: if your org standardizes on OpenCode, you inherit **model compli
 
 - Instruction file on install (`agent-brain.md`)
 - `doctor` verifying MCP registration
-- Operators spot-checking `~/.agent_brain/logs/last-route.md`
+- Operators spot-checking `~/.autonomic/memory/logs/last-route.md`
 
 Long-term fix requires **host APIs with deny semantics** — we cannot polyfill that in MCP alone.
 

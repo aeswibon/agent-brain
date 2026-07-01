@@ -84,16 +84,13 @@ fn gate_error(tool_name: &str, reason: GateReason) -> McpError {
         ),
     };
     McpError::invalid_params(
-        format!(
-            "{detail} Call route_task with user_message before `{tool_name}`. \
-             Skills, rules, session digests (Cursor/OpenCode/Codex/Gemini/Antigravity), and team memory \
-             are injected only through route_task — bypassing it makes cross-agent ingest useless."
-        ),
+        format!("route_task required — call it with user_message before `{tool_name}`."),
         Some(serde_json::json!({
             "error": code,
+            "detail": detail,
             "tool": tool_name,
             "required_first": "route_task",
-            "hint": "agent-brain briefing shows the last successful route"
+            "hint": "Call route_task first each turn; run agent-brain briefing for the last route"
         })),
     )
 }

@@ -278,34 +278,69 @@ class RouteGateTests(unittest.TestCase):
 
 
 class ReadGateTests(unittest.TestCase):
-    def test_steers_large_read(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            route_gate.STATE_PATH = Path(tmp) / "route_state.json"
-            route_gate.TOOL_EVENTS_PATH = Path(tmp) / "tool_events.jsonl"
-            route_gate.STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
-            route_gate.STATE_PATH.write_text(
-                json.dumps(
+    def test_denies_large_read_in_hard_mode(self) -> None:
+        old_mode = route_gate.READ_GATE_MODE
+        route_gate.READ_GATE_MODE = "hard"
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                route_gate.STATE_PATH = Path(tmp) / "route_state.json"
+                route_gate.TOOL_EVENTS_PATH = Path(tmp) / "tool_events.jsonl"
+                route_gate.STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+                route_gate.STATE_PATH.write_text(
+                    json.dumps(
+                        {
+                            "suggested_native_tools": [{"tool": "grep_search"}],
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                big = Path(tmp) / "big.log"
+                big.write_text("x" * 70000, encoding="utf-8")
+                result = check_read_tool_gate(
                     {
-                        "must_apply": [{"topic": "no-read-dist", "text": "never"}],
-                        "suggested_native_tools": [{"tool": "grep_search"}],
+                        "tool_name": "Read",
+                        "tool_input": json.dumps({"path": str(big)}),
                     }
-                ),
-                encoding="utf-8",
-            )
-            big = Path(tmp) / "big.log"
-            big.write_text("x" * 70000, encoding="utf-8")
-            result = check_read_tool_gate(
-                {
-                    "tool_name": "Read",
-                    "tool_input": json.dumps({"path": str(big)}),
-                }
-            )
-            self.assertIsNotNone(result)
-            assert result is not None
-            self.assertEqual(result["permission"], "allow")
-            state = load_state()
-            self.assertIn("anti_pattern_suggestion", state)
-            self.assertEqual(state["anti_pattern_suggestion"].get("path"), str(big))
+                )
+                self.assertIsNotNone(result)
+                assert result is not None
+                self.assertEqual(result["permission"], "deny")
+        finally:
+            route_gate.READ_GATE_MODE = old_mode
+
+    def test_steers_large_read(self) -> None:
+        old_mode = route_gate.READ_GATE_MODE
+        route_gate.READ_GATE_MODE = "steer"
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                route_gate.STATE_PATH = Path(tmp) / "route_state.json"
+                route_gate.TOOL_EVENTS_PATH = Path(tmp) / "tool_events.jsonl"
+                route_gate.STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+                route_gate.STATE_PATH.write_text(
+                    json.dumps(
+                        {
+                            "must_apply": [{"topic": "no-read-dist", "text": "never"}],
+                            "suggested_native_tools": [{"tool": "grep_search"}],
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                big = Path(tmp) / "big.log"
+                big.write_text("x" * 70000, encoding="utf-8")
+                result = check_read_tool_gate(
+                    {
+                        "tool_name": "Read",
+                        "tool_input": json.dumps({"path": str(big)}),
+                    }
+                )
+                self.assertIsNotNone(result)
+                assert result is not None
+                self.assertEqual(result["permission"], "allow")
+                state = load_state()
+                self.assertIn("anti_pattern_suggestion", state)
+                self.assertEqual(state["anti_pattern_suggestion"].get("path"), str(big))
+        finally:
+            route_gate.READ_GATE_MODE = old_mode
 
 
 class MultiHostHookOutputTests(unittest.TestCase):

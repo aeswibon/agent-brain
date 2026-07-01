@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.33.6] - 2026-07-01
+
+### Changed
+
+- **Default `AGENT_BRAIN_READ_GATE=hard`** — deny native Cursor `Read` on blocked paths and files larger than 64KB; steer mode remains available via env override
+- **Shorter MCP route gate errors** — one-line `-32602` message; structured JSON (`error`, `detail`, `required_first`) unchanged
+- **Clearer index output** — install, doctor, bootstrap, and `agent-brain index` report `N new items (M total)` instead of ambiguous `indexed 0 items`
+- **Hook state path** — `route_gate.py` defaults to `~/.autonomic/memory/hooks/` when `brain.db` is there (legacy `~/.agent_brain` fallback)
+- **Install MCP env** — explicit `AGENT_BRAIN_ROUTE_GATE_SCOPE=brain_mcp` and `AGENT_BRAIN_READ_GATE=hard` in generated `mcp.json`
+
+### Fixed
+
+- **Docs aligned to unified workspace** — README, USAGE, architecture, and host-integration use `~/.autonomic/memory/` as the default brain store
+- **Enforcement docs** — describe `brain_mcp` scope (agent-brain MCP tools gated; Shell/Read available when MCP is down) instead of legacy “block all tools”
+- **`doctor`** — prints resolved `memory store` path and cross-host enforcement guidance when OpenCode/Codex/Gemini/Claude hooks are incomplete
+
 ## [0.33.5] - 2026-06-30
 
 ### Fixed

@@ -111,7 +111,7 @@ Every host should call these MCP tools:
 
 Other tools (`get_context`, `route_to_mcp`, `import_memory`, …) are optional.
 
-Readable route summary: `~/.agent_brain/logs/last-route.md` or `agent-brain briefing`.
+Readable route summary: `~/.autonomic/memory/logs/last-route.md` or `agent-brain briefing`.
 
 ## Hook parity matrix
 

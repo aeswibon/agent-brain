@@ -44,7 +44,7 @@ flowchart TB
 ## Request flow (one user turn)
 
 1. User sends a message in Cursor Agent mode.
-2. **preToolUse hook** runs before Shell/Read/Write/MCP (scoped by `AGENT_BRAIN_ROUTE_GATE_SCOPE`).
+2. **preToolUse hook** runs before tools (scoped by `AGENT_BRAIN_ROUTE_GATE_SCOPE`, default `brain_mcp` gates agent-brain MCP only).
 3. If `route_task` has not succeeded for this turn, hook returns **deny** with a message to call agent-brain MCP first.
 4. Agent calls **`route_task`** with `user_message`, `current_working_directory`, `open_files`.
 5. Engine:
@@ -108,14 +108,20 @@ MCP handshake must return quickly. On startup:
 ## Data locations
 
 ```text
-~/.agent_brain/
-├── config.yaml          # auto_update, sync, memory_gc, upstream_mcp
-├── data/brain.db        # facts, indexed_items, FTS, logs
-├── cache/fastembed/     # ONNX model cache (not project cwd)
-├── packages/            # installed skill packages (ECC, etc.)
-├── logs/last-route.md   # human-readable route summary
-├── hooks/route_state.json
-└── export/              # user-initiated bundles
+~/.autonomic/                    # unified workspace (agent-body init)
+├── config.toml                  # [brain], [spine], … sections
+├── memory/                      # agent-brain default home (AGENT_BRAIN_HOME override)
+│   ├── brain.db                 # facts, indexed_items, FTS
+│   ├── packages/                # installed skill packages (ECC, etc.)
+│   ├── logs/last-route.md       # human-readable route summary
+│   ├── hooks/route_state.json   # Cursor hook gate state
+│   └── export/                  # user-initiated bundles
+├── cache/fastembed/             # ONNX model cache (via FASTEMBED_CACHE_DIR)
+└── …
+
+~/.agent_brain/                  # legacy + installer snippets (migrated into memory/)
+├── cursor-user-rules.mdc        # paste into Cursor User Rules after install
+└── hooks/                       # legacy hook state if not yet migrated
 ```
 
 ## Trade-offs

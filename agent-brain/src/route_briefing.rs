@@ -305,7 +305,7 @@ pub fn clear_anti_pattern_suggestion(home: &Path) -> Result<()> {
 }
 
 pub fn read_gate_mode() -> &'static str {
-    let raw = std::env::var("AGENT_BRAIN_READ_GATE").unwrap_or_else(|_| "steer".into());
+    let raw = std::env::var("AGENT_BRAIN_READ_GATE").unwrap_or_else(|_| "hard".into());
     let lower = raw.trim().to_ascii_lowercase();
     if lower == "off" {
         "off"

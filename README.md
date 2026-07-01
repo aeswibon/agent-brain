@@ -138,7 +138,7 @@ Reproducible proof artifacts in [`docs/benchmarks/`](docs/benchmarks/). Regenera
 
 **skills.sh eval** runs against committed `fixture-2k.db` — no network, no synthetic fillers. See [docs/benchmarks/skills-sh/README.md](docs/benchmarks/skills-sh/README.md).
 
-**Token savings (every turn):** `agent-brain briefing` and `~/.agent_brain/logs/last-route.md` show routed tokens vs an estimated naive full-index load (~120 tok/item). On a 2000-skill index routing ~500 tokens, that is typically **~99% fewer tokens** than loading everything.
+**Token savings (every turn):** `agent-brain briefing` and `~/.autonomic/memory/logs/last-route.md` show routed tokens vs an estimated naive full-index load (~120 tok/item). On a 2000-skill index routing ~500 tokens, that is typically **~99% fewer tokens** than loading everything.
 
 **Before/after (2000 skills):** [docs/blog/before-and-after-agent-brain.md](docs/blog/before-and-after-agent-brain.md) · [Team workflow](docs/TEAM-WORKFLOW.md)
 
@@ -165,7 +165,7 @@ Skills under `~/.claude/` and `~/.codex/` are already indexed.
 
 ## Data directory
 
-`~/.agent_brain/` (override with `AGENT_BRAIN_HOME`). First MCP start downloads the embedding model (~90MB).
+Default memory store: **`~/.autonomic/memory/`** (`brain.db`, packages, route logs). Legacy `~/.agent_brain/` is migrated on first run. Override with `AGENT_BRAIN_HOME`. Installer snippets (User Rules to paste) still land under `~/.agent_brain/`. First MCP start downloads the embedding model (~90MB).
 
 ---
 
